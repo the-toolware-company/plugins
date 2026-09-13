@@ -4,7 +4,13 @@ type JsonObject = Record<string, unknown>;
 
 const root = resolve(import.meta.dir, "..");
 const pluginRoot = resolve(root, "system");
-const retiredBrand = ["vi", "be"].join("");
+const retiredBrands = [
+  ["vi", "be"].join(""),
+  "thoughtful systems",
+  "thoughtful.systems",
+  "thoughtful-systems",
+];
+const expectedMcpUrl = "https://thetoolware.company/mcp";
 
 const fail = (message: string): never => {
   throw new TypeError(`Plugin validation failed: ${message}`);
@@ -81,6 +87,17 @@ requireSame("plugin version", [
   stringField(claudeManifest, "version", "Claude manifest"),
   stringField(claudeEntry, "version", "Claude marketplace entry"),
 ]);
+requireSame("marketplace name", [
+  stringField(codexMarketplace, "name", "Codex marketplace"),
+  stringField(claudeMarketplace, "name", "Claude marketplace"),
+  "the-toolware-company",
+]);
+requireSame("description", [
+  stringField(portableManifest, "description", "portable manifest"),
+  stringField(codexManifest, "description", "Codex manifest"),
+  stringField(claudeManifest, "description", "Claude manifest"),
+  stringField(claudeEntry, "description", "Claude marketplace entry"),
+]);
 requireSame("repository URL", [
   stringField(portableManifest, "repository", "portable manifest"),
   stringField(codexManifest, "repository", "Codex manifest"),
@@ -110,9 +127,12 @@ const portableServer = objectField(
   "system",
   "portable MCP.mcpServers",
 );
-const nativeUrl = stringField(nativeServer, "url", "native Thoughtful Systems server");
-const portableUrl = stringField(portableServer, "url", "portable Thoughtful Systems server");
+const nativeUrl = stringField(nativeServer, "url", "native Toolware server");
+const portableUrl = stringField(portableServer, "url", "portable Toolware server");
 requireSame("MCP URL", [nativeUrl, portableUrl]);
+if (nativeUrl !== expectedMcpUrl) {
+  fail(`MCP URL must point to the production endpoint at ${expectedMcpUrl}.`);
+}
 
 const endpoint = URL.parse(nativeUrl);
 if (endpoint?.protocol !== "https:" || endpoint.pathname !== "/mcp") {
@@ -132,6 +152,8 @@ for (const relativePath of [
   "assets/system-mark.svg",
   "skills/system/SKILL.md",
   "skills/system/agents/openai.yaml",
+  "skills/tool-builder/SKILL.md",
+  "skills/tool-builder/agents/openai.yaml",
 ]) {
   await requireFile(relativePath);
 }
@@ -167,9 +189,15 @@ for await (const relativePath of publicGlob.scan({
     continue;
   }
   const contents = await Bun.file(resolve(root, relativePath)).text();
+  // Preserve the original brand in historical reports without exempting safety checks.
+  const brands = relativePath.startsWith("evals/system-skill/results/")
+    ? retiredBrands.slice(0, 1)
+    : retiredBrands;
   if (
-    relativePath.toLowerCase().includes(retiredBrand) ||
-    contents.toLowerCase().includes(retiredBrand)
+    brands.some(
+      (brand) =>
+        relativePath.toLowerCase().includes(brand) || contents.toLowerCase().includes(brand),
+    )
   ) {
     fail(`${relativePath} contains the retired product name.`);
   }
@@ -181,5 +209,5 @@ for await (const relativePath of publicGlob.scan({
 }
 
 process.stdout.write(
-  `Validated Thoughtful Systems plugin ${stringField(codexManifest, "version", "Codex manifest")} for ${nativeUrl}.\n`,
+  `Validated Toolware plugin ${stringField(codexManifest, "version", "Codex manifest")} for ${nativeUrl}.\n`,
 );

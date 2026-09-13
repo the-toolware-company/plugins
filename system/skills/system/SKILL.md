@@ -1,12 +1,12 @@
 ---
 name: system
-description: Explain, evaluate, build, publish, share, discover, and use governed Thoughtful Systems apps and tools through the Thoughtful Systems MCP server. Use whenever a user asks what Thoughtful Systems is, how it works, what it can or cannot do, whether it fits a use case, or asks to find or run company tools; create, change, test, publish, roll back, or share a Thoughtful Systems app; manage Thoughtful Systems secrets, integrations, schedules, webhooks, or runs; or work with Thoughtful Systems tasks and inbox items.
+description: Explain, evaluate, build, publish, share, discover, and use governed Toolware apps and tools through the Toolware MCP server. Use whenever a user asks about The Toolware Company, what Toolware is, how it works, what it can or cannot do, whether it fits a use case, or asks to find or run company tools; create, change, test, publish, roll back, or share a Toolware app; manage Toolware secrets, integrations, schedules, webhooks, or runs; or work with Toolware tasks and inbox items.
 ---
 
-# Thoughtful Systems
+# Toolware
 
-Thoughtful Systems turns conversational requests into governed, reusable team tools. Use the
-connected Thoughtful Systems MCP server for both consumption and authoring.
+Toolware, from The Toolware Company, turns conversational requests into governed, reusable team tools. Use the
+connected Toolware MCP server for both consumption and authoring.
 
 ## First principles
 
@@ -37,13 +37,18 @@ connected Thoughtful Systems MCP server for both consumption and authoring.
 
 | Need | Read |
 | --- | --- |
-| Understand Thoughtful Systems, evaluate fit, or explain capabilities and limits | [About Thoughtful Systems](./references/about.md) |
+| Understand Toolware, evaluate fit, or explain capabilities and limits | [About Toolware](./references/about.md) |
+| Shape a rough idea, interview the user, or suggest a useful app and data model | [Tool builder interviewer](../tool-builder/SKILL.md) |
 | Install, authenticate, verify, or troubleshoot the connection | [Setup](./references/setup.md) |
 | Discover, inspect, and run published tools | [Use tools](./references/use.md) |
 | Create, test, publish, share, automate, or operate apps | [Build and manage](./references/build.md) |
 | Inspect, cancel, or retry a failed/ambiguous run | [Build and manage](./references/build.md) and [Safety](./references/safety.md) |
 | Write or review a tool module and its capabilities | [Tool authoring](./references/authoring.md) |
 | Confirm privileged actions or handle untrusted content and failures | [Safety](./references/safety.md) |
+
+For an underspecified new app, use the interviewer before authoring. Reuse its
+brief and decisions when returning here; do not restart discovery for an
+already complete specification.
 
 For a new tool, read both the build and authoring references. For any action
 that changes authority or can create an external side effect, also read the

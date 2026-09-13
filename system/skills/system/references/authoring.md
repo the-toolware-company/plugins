@@ -1,4 +1,4 @@
-# Author Thoughtful Systems tool modules
+# Author Toolware tool modules
 
 Read this together with the live `create_tool` or `update_tool` builder type.
 The catalog controls the action wrapper; this reference controls the module

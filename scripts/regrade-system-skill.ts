@@ -25,7 +25,7 @@ const reportPath =
   reportArgument?.slice("--report=".length) ??
   (reportIndex >= 0 ? Bun.argv[reportIndex + 1] : undefined);
 if (!reportPath) {
-  throw new Error("Provide --report with a Thoughtful Systems skill report.json path.");
+  throw new Error("Provide --report with a Toolware skill report.json path.");
 }
 
 const inputPath = resolve(reportPath);

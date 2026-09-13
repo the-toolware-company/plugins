@@ -1,7 +1,8 @@
 {
-  "name": "@thoughtful-systems/plugins",
+  "name": "@the-toolware-company/plugins",
   "private": true,
-  "repository": "https://github.com/thoughtful-systems/plugins",
+  "license": "MIT",
+  "repository": "https://github.com/the-toolware-company/plugins",
   "type": "module",
   "scripts": {
     "format": "oxfmt --write .",
@@ -14,7 +15,8 @@
     "test:install": "bun scripts/test-installs.ts",
     "eval:skill": "bun scripts/evaluate-system-skill.ts",
     "eval:skill:dry": "bun scripts/evaluate-system-skill.ts --dry-run",
-    "eval:skill:regrade": "bun scripts/regrade-system-skill.ts"
+    "eval:skill:regrade": "bun scripts/regrade-system-skill.ts",
+    "test:live": "bun scripts/test-live.ts"
   },
   "devDependencies": {
     "@anthropic-ai/claude-code": "2.1.241",

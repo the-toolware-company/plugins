@@ -1,15 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "system",
-  "displayName": "Thoughtful Systems",
-  "version": "0.2.0",
-  "description": "Build, publish, share, discover, and use governed team tools through Thoughtful Systems.",
+  "displayName": "Toolware",
+  "version": "0.3.0",
+  "license": "MIT",
+  "description": "Discover, run, build, and share governed team tools through Toolware.",
   "author": {
-    "name": "Thoughtful Systems",
-    "url": "https://thoughtful.systems"
+    "email": "support@thetoolware.company",
+    "name": "The Toolware Company",
+    "url": "https://thetoolware.company"
   },
-  "homepage": "https://thoughtful.systems",
-  "repository": "https://github.com/thoughtful-systems/plugins/tree/main/system",
+  "homepage": "https://thetoolware.company",
+  "repository": "https://github.com/the-toolware-company/plugins/tree/main/system",
   "keywords": ["mcp", "tools", "tool-authoring", "automation", "agent-skills"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json"

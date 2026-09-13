@@ -1,4 +1,4 @@
-# Build and manage Thoughtful Systems apps
+# Build and manage Toolware apps
 
 ## Enter build mode and discover live APIs
 

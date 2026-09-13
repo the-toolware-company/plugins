@@ -1,24 +1,27 @@
 {
-  "name": "thoughtful-systems",
+  "name": "the-toolware-company",
   "owner": {
-    "name": "Thoughtful Systems",
-    "url": "https://thoughtful.systems"
+    "name": "The Toolware Company",
+    "email": "support@thetoolware.company",
+    "url": "https://thetoolware.company"
   },
-  "description": "Skills and MCP-powered plugins from Thoughtful Systems.",
-  "version": "2.0.0",
+  "description": "Skills and MCP plugins from The Toolware Company.",
+  "version": "3.0.0",
   "plugins": [
     {
       "name": "system",
-      "displayName": "Thoughtful Systems",
+      "displayName": "Toolware",
       "source": "./system",
-      "description": "Build, publish, share, discover, and use governed team tools through Thoughtful Systems.",
-      "version": "0.2.0",
+      "description": "Discover, run, build, and share governed team tools through Toolware.",
+      "version": "0.3.0",
+      "license": "MIT",
       "author": {
-        "name": "Thoughtful Systems",
-        "url": "https://thoughtful.systems"
+        "name": "The Toolware Company",
+        "email": "support@thetoolware.company",
+        "url": "https://thetoolware.company"
       },
-      "homepage": "https://thoughtful.systems",
-      "repository": "https://github.com/thoughtful-systems/plugins/tree/main/system",
+      "homepage": "https://thetoolware.company",
+      "repository": "https://github.com/the-toolware-company/plugins/tree/main/system",
       "category": "Productivity",
       "tags": ["mcp", "automation", "tool-authoring", "team-tools"]
     }

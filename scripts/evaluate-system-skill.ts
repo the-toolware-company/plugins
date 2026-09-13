@@ -184,7 +184,7 @@ const runCase = async ({
     "--thinking",
     options.thinking,
     "--append-system-prompt",
-    "Act as a business operations assistant. Use only applicable skill references and the available Thoughtful Systems tools; do not inspect unrelated files.",
+    "Act as a business operations assistant. Use only applicable skill references and the available Toolware tools; do not inspect unrelated files.",
   ];
   if (condition === "skill") {
     command.push("--skill", skillPath);

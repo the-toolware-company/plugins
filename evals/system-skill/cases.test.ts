@@ -20,12 +20,12 @@ const failures = (
     .map((criterion) => criterion.id);
 };
 
-describe("Thoughtful Systems skill deterministic graders", () => {
+describe("Toolware skill deterministic graders", () => {
   test("accepts a direct hard-boundary recommendation without API probing", () => {
     expect(
       failures(
         "fit-boundary",
-        "Recommendation: No—do not use Thoughtful Systems as the host. It cannot provide a custom UI, realtime collaboration, or arbitrary WebSockets. Use a dedicated web application and realtime backend; Thoughtful Systems can complement it with governed workflows.",
+        "Recommendation: No—do not use Toolware as the host. It cannot provide a custom UI, realtime collaboration, or arbitrary WebSockets. Use a dedicated web application and realtime backend; Toolware can complement it with governed workflows.",
         [call("read", { path: "SKILL.md" }), call("read", { path: "about.md" })],
       ),
     ).toEqual([]);
@@ -35,7 +35,7 @@ describe("Thoughtful Systems skill deterministic graders", () => {
     expect(
       failures(
         "hidden-tool-boundary",
-        "I can't call it because it isn't available in the current Thoughtful Systems catalog for this account.",
+        "I can't call it because it isn't available in the current Toolware catalog for this account.",
         [call("system_catalog", { action: "search" })],
       ),
     ).toEqual([]);

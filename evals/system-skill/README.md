@@ -1,7 +1,7 @@
-# Thoughtful Systems skill evaluations
+# Toolware skill evaluations
 
-These evaluations compare the same model and production-shaped Thoughtful Systems tool
-surface with and without the bundled Thoughtful Systems skill. The mock tools are
+These evaluations compare the same model and production-shaped Toolware tool
+surface with and without the bundled Toolware skill. The mock tools are
 deterministic; model behavior is the variable under test.
 
 The suite covers:

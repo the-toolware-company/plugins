@@ -23,6 +23,7 @@ export default {
     const id = crypto.randomUUID();
     const record = { id, value: input.value };
     await ctx.storage.put(`example:${id}`, record);
+
     return record;
   },
 };

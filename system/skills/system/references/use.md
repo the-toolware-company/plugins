@@ -1,4 +1,4 @@
-# Discover and use Thoughtful Systems tools
+# Discover and use Toolware tools
 
 ## 1. Select use mode
 
@@ -43,6 +43,10 @@ async () => {
 
 Use only namespaces and methods returned by the current catalog.
 
+If a discovered method returns `unknown`, return its result unchanged first.
+After a successful call, refresh `system_catalog` types before accessing result
+fields; the server can learn an advisory shape for the current caller.
+
 Sandbox rules:
 
 - JavaScript only; do not include TypeScript syntax.
@@ -53,7 +57,7 @@ Sandbox rules:
   dependencies.
 - Keep programs focused and bounded. Split unrelated work into separate calls.
 - Each underlying method is authorized again and recorded as a normal,
-  version-pinned Thoughtful Systems run.
+  version-pinned Toolware run.
 
 ## 4. Handle side effects deliberately
 

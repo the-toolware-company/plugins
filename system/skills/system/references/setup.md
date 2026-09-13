@@ -1,12 +1,14 @@
-# Set up and verify Thoughtful Systems
+# Set up and verify Toolware
 
 ## Connection
 
 The plugin declares one Streamable HTTP MCP server named `system`:
 
 ```text
-https://thoughtful.systems/mcp
+https://thetoolware.company/mcp
 ```
+
+This is the production endpoint. Sign in to the intended account and organization.
 
 The native ChatGPT/Codex and Claude manifests both reference `.mcp.json`.
 Portable Agent Plugins clients use `mcp.json`. None of these files carries a
@@ -20,7 +22,7 @@ and secure token storage.
    directory containing `plugin.json`.
 2. Ensure the client enables both the `system` skill and the `system` MCP server.
    A client may conform while supporting only one portable component type.
-3. Start the connection. When prompted, complete Thoughtful Systems' browser sign-in and
+3. Start the connection. When prompted, complete Toolware' browser sign-in and
    consent flow using the intended account and organization.
 4. Never ask the user to paste a bearer token into chat or put one in
    `plugin.json`, `.mcp.json`, `mcp.json`, headers, environment variables,
@@ -56,7 +58,7 @@ connection. Perform an authenticated read:
    ```
 
 A successful catalog result—even an empty authorized catalog—proves the MCP
-request reached Thoughtful Systems as a verified user. A `401` or authorization challenge is
+request reached Toolware as a verified user. A `401` or authorization challenge is
 not success.
 
 ## Organization and mode behavior
@@ -80,12 +82,12 @@ switch to a local development bootstrap.
 ### Skill loads but tools are absent
 
 The client may support Agent Skills without Streamable HTTP MCP. Configure
-`https://thoughtful.systems/mcp` through its native MCP UI or use a client that
-supports both components.
+`https://thetoolware.company/mcp` through its native MCP UI or use a
+client that supports both components.
 
 ### Tools load but catalog access fails
 
-Confirm the user completed consent for the intended Thoughtful Systems organization. If the
+Confirm the user completed consent for the intended Toolware organization. If the
 credential was issued for another organization, reconnect and select the
 correct organization during authorization.
 

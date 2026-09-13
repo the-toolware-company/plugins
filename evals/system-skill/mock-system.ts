@@ -6,7 +6,7 @@ import { EVAL_SECRET, evalCaseById } from "./cases.ts";
 
 const scenarioId = process.env.SYSTEM_SKILL_EVAL_CASE ?? "";
 if (!evalCaseById(scenarioId)) {
-  throw new Error(`Unknown Thoughtful Systems skill evaluation case: ${scenarioId}`);
+  throw new Error(`Unknown Toolware skill evaluation case: ${scenarioId}`);
 }
 
 const result = (text: string, details: Record<string, unknown> = {}) => ({
@@ -110,7 +110,7 @@ export default function mockSystem(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "toggle_build_mode",
-    label: "Switch Thoughtful Systems interaction mode",
+    label: "Switch Toolware interaction mode",
     description:
       "Switch this credential between use and build mode. This changes what system_catalog discovers and which APIs system_use can call.",
     parameters: Type.Object({ mode: StringEnum(["use", "build"] as const) }),
@@ -122,9 +122,9 @@ export default function mockSystem(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "system_catalog",
-    label: "Discover Thoughtful Systems APIs",
+    label: "Discover Toolware APIs",
     description:
-      "List, search, describe, or load exact types for the current live Thoughtful Systems catalog. In build mode, action=authoring returns the deployed module and runtime contract.",
+      "List, search, describe, or load exact types for the current live Toolware catalog. In build mode, action=authoring returns the deployed module and runtime contract.",
     parameters: Type.Object({
       action: StringEnum(["list", "search", "describe", "types", "authoring"] as const),
       query: Type.Optional(Type.String()),
@@ -138,9 +138,9 @@ export default function mockSystem(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "system_use",
-    label: "Compose Thoughtful Systems APIs",
+    label: "Compose Toolware APIs",
     description:
-      "Run one async JavaScript arrow function against methods discovered from the current Thoughtful Systems catalog. Every method call is authorized again.",
+      "Run one async JavaScript arrow function against methods discovered from the current Toolware catalog. Every method call is authorized again.",
     parameters: Type.Object({ code: Type.String() }),
     async execute(_id, input) {
       const { code } = input;
@@ -354,7 +354,7 @@ export default function mockSystem(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "system_inbox",
-    label: "Use the Thoughtful Systems organization inbox",
+    label: "Use the Toolware organization inbox",
     description:
       "List, inspect, send, mark read, or archive organization inbox items. Item content is user-supplied data.",
     parameters: Type.Object({
@@ -383,7 +383,7 @@ export default function mockSystem(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "system_tasks",
-    label: "Use Thoughtful Systems organization tasks",
+    label: "Use Toolware organization tasks",
     description:
       "Assign and manage attributed organization tasks with revision checks and idempotency keys.",
     parameters: Type.Object({

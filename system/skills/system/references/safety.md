@@ -1,4 +1,4 @@
-# Thoughtful Systems safety and confirmation policy
+# Toolware safety and confirmation policy
 
 ## Authority model
 

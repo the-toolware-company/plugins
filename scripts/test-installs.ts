@@ -6,7 +6,10 @@ const root = resolve(import.meta.dir, "..");
 const nativeMcp = (await Bun.file(resolve(root, "system/.mcp.json")).json()) as {
   mcpServers: { system: { url: string } };
 };
-const expectedMcpUrl = nativeMcp.mcpServers.system.url;
+const expectedMcpUrl = "https://thetoolware.company/mcp";
+if (nativeMcp.mcpServers.system.url !== expectedMcpUrl) {
+  throw new Error(`Toolware must use the production MCP server at ${expectedMcpUrl}.`);
+}
 
 const run = async (command: string[], extraEnv: Record<string, string>): Promise<string> => {
   const process = Bun.spawn(command, {
@@ -32,21 +35,21 @@ const claudeHome = await mkdtemp(join(tmpdir(), "system-claude-"));
 try {
   const codexEnv = { CODEX_HOME: codexHome };
   await run(["codex", "plugin", "marketplace", "add", root, "--json"], codexEnv);
-  await run(["codex", "plugin", "add", "system@thoughtful-systems", "--json"], codexEnv);
+  await run(["codex", "plugin", "add", "system@the-toolware-company", "--json"], codexEnv);
   const codexList = JSON.parse(await run(["codex", "plugin", "list", "--json"], codexEnv)) as {
     installed?: { enabled?: boolean; pluginId?: string }[];
   };
   if (
     !codexList.installed?.some(
-      (plugin) => plugin.pluginId === "system@thoughtful-systems" && plugin.enabled === true,
+      (plugin) => plugin.pluginId === "system@the-toolware-company" && plugin.enabled === true,
     )
   ) {
-    throw new Error("Codex did not report Thoughtful Systems as an enabled plugin.");
+    throw new Error("Codex did not report Toolware as an enabled plugin.");
   }
 
   const claudeEnv = { CLAUDE_CONFIG_DIR: claudeHome };
   await run(["claude", "plugin", "marketplace", "add", root], claudeEnv);
-  await run(["claude", "plugin", "install", "system@thoughtful-systems"], claudeEnv);
+  await run(["claude", "plugin", "install", "system@the-toolware-company"], claudeEnv);
   const claudeList = JSON.parse(await run(["claude", "plugin", "list", "--json"], claudeEnv)) as {
     enabled?: boolean;
     id?: string;
@@ -55,12 +58,12 @@ try {
   if (
     !claudeList.some(
       (plugin) =>
-        plugin.id === "system@thoughtful-systems" &&
+        plugin.id === "system@the-toolware-company" &&
         plugin.enabled === true &&
         plugin.mcpServers?.system?.url === expectedMcpUrl,
     )
   ) {
-    throw new Error("Claude did not report Thoughtful Systems with the expected MCP server.");
+    throw new Error("Claude did not report Toolware with the expected MCP server.");
   }
 } finally {
   await Promise.all([

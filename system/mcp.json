@@ -3,7 +3,7 @@
   "mcpServers": {
     "system": {
       "type": "streamable-http",
-      "url": "https://thoughtful.systems/mcp"
+      "url": "https://thetoolware.company/mcp"
     }
   }
 }

@@ -1,9 +1,9 @@
-# Understand Thoughtful Systems and evaluate fit
+# Understand Toolware and evaluate fit
 
 ## Mental model
 
-Thoughtful Systems is a governed platform for reusable, AI-accessible team capabilities. The
-user keeps working in their AI client; Thoughtful Systems supplies the durable control and
+Toolware is a governed platform for reusable, AI-accessible team capabilities. The
+user keeps working in their AI client; Toolware supplies the durable control and
 execution layer behind one OAuth-protected MCP connection.
 
 An app is the main boundary. It groups tools, shared storage and files,
@@ -17,7 +17,7 @@ isolated Cloudflare Dynamic Worker. Generated code receives only declared,
 brokered `ctx` capabilities. Catalog visibility and build mode are user
 experience features, not authority.
 
-## What Thoughtful Systems can do
+## What Toolware can do
 
 - Discover and invoke authorized, published company tools with live schemas.
 - Create schema-described JavaScript tools and keep every saved version
@@ -34,7 +34,7 @@ experience features, not authority.
   rollback, and operational recovery.
 - Compose several authorized tools in a disposable `system_use` sandbox.
 
-## What Thoughtful Systems cannot do
+## What Toolware cannot do
 
 - It is not a general hosting platform for bespoke visual apps, real-time
   collaborative canvases, or arbitrary long-running services.
@@ -58,7 +58,7 @@ experience features, not authority.
 
 ## Fit test
 
-Prefer Thoughtful Systems when the useful product can be expressed as governed operations an
+Prefer Toolware when the useful product can be expressed as governed operations an
 AI client calls: internal operations, shared data utilities, automations,
 knowledge workflows, or controlled integrations.
 
@@ -68,7 +68,7 @@ cross-app shared authority, hard real-time collaboration, or platform-level
 infrastructure control.
 
 When answering a fit question, state the desired outcome, map it to current
-Thoughtful Systems primitives, identify any missing primitive, and distinguish an
+Toolware primitives, identify any missing primitive, and distinguish an
 implemented capability from a roadmap idea. Confirm exact current schemas and
 availability through the connected MCP catalog before proposing a build when
 the recommendation depends on those live details. If a hard boundary above
