@@ -31,13 +31,37 @@ claude plugin install system@the-toolware-company
 These install release 0.3.0 from our GitHub marketplace. Official directory
 approval is separate; this repository does not imply an approved listing.
 
-### ChatGPT and Claude
+### ChatGPT
 
-Once the official listing is approved, find **Toolware** in your client's
-plugin directory, install it, and complete **Connect**. Before approval,
-reviewers can connect the remote MCP endpoint through their client's developer
-or custom-connector settings. An MCP-only connection does not install the
-bundled skill; use the package import flow supported by that client.
+You can connect before public-directory approval:
+
+1. Open Settings → Security and login and enable Developer mode, if available
+   under your account and workspace policy.
+2. Open [ChatGPT Plugins](https://chatgpt.com/plugins), select the plus button,
+   and name the connection **Toolware**.
+3. Enter **https://thetoolware.company/mcp** and use OAuth if asked.
+4. Sign in, select your Toolware organisation and review consent. Enable the
+   connection in a new conversation, then use the check below.
+
+If your administrator already published a Toolware workspace plugin, open it
+and choose **Connect**. See the [official setup guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
+
+### Claude
+
+1. Open [Customize → Connectors](https://claude.ai/customize/connectors), then
+   **+ → Add custom connector** on an eligible plan.
+2. Name it **Toolware** and enter **https://thetoolware.company/mcp**. Leave
+   advanced OAuth credentials blank; Toolware supports automatic registration.
+3. Choose **Add**, then **Connect**. Sign in, select your organisation and
+   review consent.
+4. In a new conversation, open **+ → Connectors** and enable Toolware.
+
+For Team or Enterprise, an owner first adds it through **Organization settings
+→ Connectors → Add → Custom → Web**. See the [official connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
+
+A custom connection supplies the MCP tools. The Codex and Claude Code plugins
+also bundle our workflow skills. Public directory submissions are separate
+from this GitHub marketplace; no approved listing is claimed here.
 
 ## Start using it
 
@@ -45,7 +69,9 @@ bundled skill; use the package import flow supported by that client.
 2. Complete the browser sign-in and consent flow for your Toolware organization.
    In Claude Code, use `/mcp` if authentication is required. Never paste tokens
    or passwords into chat or configuration.
-3. Ask: **“Show me the tools and apps I can use in Toolware.”**
+3. Ask: **“Connect to Toolware, select use mode, and list the apps and tools I
+   can use. Do not run any app tools yet.”** A successful catalog response
+   confirms the connection; seeing tool definitions alone does not.
 4. Then try: **“Explain what Toolware can and cannot do.”** or
    **“Interview me and help me design a Toolware app for my workflow.”**
 
