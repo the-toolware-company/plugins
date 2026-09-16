@@ -15,7 +15,7 @@ The suite covers:
 - untrusted inbox content;
 - task revision conflicts;
 - draft authoring without premature publication; and
-- write-only secret handling.
+- browser-only credential setup without secrets in tool arguments or replies.
 
 Run one paired trial across all scenarios:
 

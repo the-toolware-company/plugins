@@ -103,11 +103,16 @@ After every grant, revocation, or organization policy change, call
 
 ## Secrets and integrations
 
-- `set_secret` is write-only. Never repeat the value in source, a summary,
-  task content, logs, or app storage. Tool versions receive only declared
-  secret names.
-- Connection URLs and one-time webhook secrets are sensitive. Show them only
-  to the user who requested setup and do not retain them in agent memory.
+- `set_secret` takes the app and secret name only. Give the requesting user
+  the returned browser setup link; they enter and save the value there. No
+  secret changes until they submit the form. Never request or pass credentials
+  through chat, composition code, or tool inputs. Tool versions receive only
+  declared secret names.
+- Webhook creation and rotation return browser setup links. The user confirms
+  rotation and copies the key directly to their provider in the browser.
+  Requesting a rotation link does not change the current key.
+  Connection URLs are sensitive; show them only to the requesting user and do
+  not retain them in agent memory.
 
 ## Automation and operations
 
