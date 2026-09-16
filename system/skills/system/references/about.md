@@ -43,7 +43,8 @@ experience features, not authority.
   imports. It cannot cross app data, files, secrets, or authority.
 - It cannot use an arbitrary npm package. Only exact, platform-approved
   dependencies can be bundled during trusted authoring.
-- It cannot reveal app secret values. App secrets are write-only through MCP.
+- It cannot reveal app secret values. MCP provides browser setup links;
+  credentials are entered only in the authenticated browser form.
 - It does not treat build mode, organization role, or a catalog listing as
   permission. Durable app policy is checked again on every call.
 - It does not promise exactly-once external writes. Queue delivery and provider

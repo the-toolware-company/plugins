@@ -1,27 +1,37 @@
 # Publish Toolware
 
-Release: **0.3.0**. Publisher: **The Toolware Company**.
+Release: **0.3.1**. Publisher: **The Toolware Company**.
 Package: `system`. Git marketplace: `the-toolware-company`.
 Endpoint: **https://thetoolware.company/mcp**.
 
 ## Current readiness
 
-The package is released through the GitHub marketplace. Official directory
-submission has separate business and legal requirements below. Package validation, isolated installs, and production discovery were rerun on
-14 September 2026. They established:
+The package is distributed through the GitHub marketplace. Official directory
+submission has separate business and legal requirements below. Package validation,
+isolated installs, and production discovery were rerun on 16 September 2026.
+They established:
 
 - The distribution repository is public at
   <https://github.com/the-toolware-company/plugins>.
 - Production `/status` returned healthy, release SHA
-  `dcf30ffa0a438eaab1a8ab2dfe6d1258602c856d`, runtime contract `2026-08-19.1`.
+  `abce39e938030211b4fb95639baa19c2d6ec796f`, runtime contract `2026-08-19.1`.
 - Anonymous `/mcp` returned 401 with an OAuth resource-metadata challenge on
   the new domain. Resource discovery names the new-domain authorization server.
-- Formatting, TypeScript, all 10 deterministic grading tests, package metadata,
+- Formatting, TypeScript, all 13 deterministic grading tests, package metadata,
   and Claude's strict plugin and marketplace validators passed.
 - Isolated Codex and Claude marketplace installs passed using temporary client
   configuration directories.
+- The production browser credential route denied anonymous access with 401
+  and returned no-store and frame-ancestors protections.
 - These checks do not prove browser authorization, refresh/revocation, an
   authenticated catalog read, or starter-prompt behavior.
+
+Release 0.3.1 aligns the bundled skill with the deployed browser credential
+flow: `set_secret` accepts only an app and secret name, and webhook keys stay
+in the authenticated browser. Requesting a setup link does not save a secret
+or rotate an existing webhook key. The evaluation mock and graders now reject
+credential values in tool inputs and require a browser handoff that leaves
+saving pending.
 
 Official directory submission gates:
 
@@ -31,7 +41,7 @@ Official directory submission gates:
       data and connected accounts. The owner supplied
       [privacy policy](https://thetoolware.company/privacy-policy) and
       [terms](https://thetoolware.company/terms-of-service). Both live pages were
-      checked on 14 September: both explicitly remain drafts, and the privacy
+      checked on 16 September: both explicitly remain drafts, and the privacy
       notice excludes the workspace, tool data, connected accounts, and AI
       integrations. These are intended destinations, not final policy evidence.
       Add them to the manifest's `interface.privacyPolicyURL` and
@@ -48,7 +58,7 @@ Official directory submission gates:
 
 | Destination | Distribution | Next requirement |
 | --- | --- | --- |
-| Toolware GitHub marketplace | Codex and Claude Code package 0.3.0 is available | Install commands are in the public README; no public-directory approval is implied. |
+| Toolware GitHub marketplace | Codex and Claude Code package 0.3.1 is available | Install commands are in the public README; no public-directory approval is implied. |
 | [OpenAI Plugins Directory](https://platform.openai.com/plugins) | One reviewed listing for ChatGPT and Codex, with MCP and skills | Sign in to the publisher organisation; verified identity, final policies, domain challenge, working reviewer account, and actual client testing. |
 | [Claude community marketplace](https://platform.claude.com/plugins/submit) | Reviewed plugin containing skills and MCP | Sign in to Console; submit the public repository and plugin subdirectory `system`. |
 | [Claude Connectors Directory](https://claude.ai/admin-settings/directory/submissions/new) | Remote MCP connector | Team/Enterprise organisation with directory management access, reviewer account and completed connector checks. |

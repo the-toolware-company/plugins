@@ -28,7 +28,7 @@ claude plugin marketplace add the-toolware-company/plugins
 claude plugin install system@the-toolware-company
 ```
 
-These install release 0.3.0 from our GitHub marketplace. Official directory
+These install release 0.3.1 from our GitHub marketplace. Official directory
 approval is separate; this repository does not imply an approved listing.
 
 ### ChatGPT
