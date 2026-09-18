@@ -55,7 +55,7 @@ interface RunCaseOptions {
 
 const root = resolve(import.meta.dir, "..");
 const extensionPath = resolve(root, "evals/system-skill/mock-system.ts");
-const skillPath = resolve(root, "system/skills/system");
+const skillPath = resolve(root, "system/skills/using-toolware");
 const artifactRoot = resolve(root, ".system-skill-evals");
 
 const skillFiles: string[] = [];

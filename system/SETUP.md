@@ -5,7 +5,7 @@ description: Connect and verify the OAuth-protected Toolware production MCP serv
 
 # Set up Toolware
 
-Read [`skills/system/references/setup.md`](./skills/system/references/setup.md) and
+Read [`skills/using-toolware/references/setup.md`](./skills/using-toolware/references/setup.md) and
 follow its connection and verification workflow.
 
 Use the bundled `system` MCP server, which connects to the production

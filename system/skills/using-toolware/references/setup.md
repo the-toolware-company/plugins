@@ -20,7 +20,7 @@ and secure token storage.
 1. Install the plugin through the client's Plugin Directory, marketplace, or
    local import workflow. For a portable client, load the plugin root—the
    directory containing `plugin.json`.
-2. Ensure the client enables both the `system` skill and the `system` MCP server.
+2. Ensure the client enables both the `using-toolware` skill and the `system` MCP server.
    A client may conform while supporting only one portable component type.
 3. Start the connection. When prompted, complete Toolware' browser sign-in and
    consent flow using the intended account and organization.

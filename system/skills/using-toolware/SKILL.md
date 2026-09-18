@@ -1,9 +1,9 @@
 ---
-name: system
+name: using-toolware
 description: Explain, evaluate, build, publish, share, discover, and use governed Toolware apps and tools through the Toolware MCP server. Use whenever a user asks about The Toolware Company, what Toolware is, how it works, what it can or cannot do, whether it fits a use case, or asks to find or run company tools; create, change, test, publish, roll back, or share a Toolware app; manage Toolware secrets, integrations, schedules, webhooks, or runs; or work with Toolware tasks and inbox items.
 ---
 
-# Toolware
+# Using Toolware
 
 Toolware, from The Toolware Company, turns conversational requests into governed, reusable team tools. Use the
 connected Toolware MCP server for both consumption and authoring.
@@ -38,7 +38,7 @@ connected Toolware MCP server for both consumption and authoring.
 | Need | Read |
 | --- | --- |
 | Understand Toolware, evaluate fit, or explain capabilities and limits | [About Toolware](./references/about.md) |
-| Shape a rough idea, interview the user, or suggest a useful app and data model | [Tool builder interviewer](../tool-builder/SKILL.md) |
+| Shape a rough idea, interview the user, or suggest a useful app and data model | [Tool builder interviewer](../toolware-tool-builder/SKILL.md) |
 | Install, authenticate, verify, or troubleshoot the connection | [Setup](./references/setup.md) |
 | Discover, inspect, and run published tools | [Use tools](./references/use.md) |
 | Create, test, publish, share, automate, or operate apps | [Build and manage](./references/build.md) |

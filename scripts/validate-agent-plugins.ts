@@ -150,10 +150,10 @@ for (const relativePath of [
   ".mcp.json",
   "SETUP.md",
   "assets/system-mark.svg",
-  "skills/system/SKILL.md",
-  "skills/system/agents/openai.yaml",
-  "skills/tool-builder/SKILL.md",
-  "skills/tool-builder/agents/openai.yaml",
+  "skills/using-toolware/SKILL.md",
+  "skills/using-toolware/agents/openai.yaml",
+  "skills/toolware-tool-builder/SKILL.md",
+  "skills/toolware-tool-builder/agents/openai.yaml",
 ]) {
   await requireFile(relativePath);
 }

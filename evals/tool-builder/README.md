@@ -1,7 +1,7 @@
 # Tool builder interview checks
 
 These are conversation checks for
-[`tool-builder`](../../system/skills/tool-builder/SKILL.md), separate from the
+[`toolware-tool-builder`](../../system/skills/toolware-tool-builder/SKILL.md), separate from the
 automated system-tool rubric. Run them in fresh conversations with the bundled
 skill and its references. Toolware is disconnected in these scenarios; permit
 reference reads only. No live app, account, or external side effect is needed.

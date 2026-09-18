@@ -1,4 +1,4 @@
 interface:
   display_name: "Toolware Tool Builder"
   short_description: "Shape an idea into a useful app through questions"
-  default_prompt: "Use $tool-builder to interview me and suggest a useful Toolware app for my workflow."
+  default_prompt: "Use $toolware-tool-builder to interview me and suggest a useful Toolware app for my workflow."
