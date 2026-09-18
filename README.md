@@ -28,8 +28,8 @@ claude plugin marketplace add the-toolware-company/plugins
 claude plugin install system@the-toolware-company
 ```
 
-These install release 0.3.1 from our GitHub marketplace. Official directory
-approval is separate; this repository does not imply an approved listing.
+These install the latest merged release from our GitHub marketplace. Official
+directory approval is separate; this repository does not imply an approved listing.
 
 ### ChatGPT
 
@@ -75,19 +75,19 @@ from this GitHub marketplace; no approved listing is claimed here.
 4. Then try: **“Explain what Toolware can and cannot do.”** or
    **“Interview me and help me design a Toolware app for my workflow.”**
 
-The `tool-builder` skill leads with focused questions and suggestions, then
-produces a reviewable brief covering records, operations, access, and example
-outcomes. The `system` skill builds and tests the agreed app through MCP.
+The `toolware-tool-builder` skill leads with focused questions and suggestions,
+then produces a reviewable brief covering records, operations, access, and example
+outcomes. The `using-toolware` skill builds and tests the agreed app through MCP.
 
 An empty authorized catalog is a valid result: your organization may not have
 shared any tools yet. Your organization and app permissions determine which
 tools you can use or manage.
 
-The technical plugin/skill/server identifier remains `system`; the marketplace
-is `the-toolware-company`. If you installed from the previous marketplace,
+The core skill is `using-toolware`. The plugin and MCP server identifiers remain
+`system`; the marketplace is `the-toolware-company`. If you installed from the previous marketplace,
 remove that old plugin through the client's plugin manager, install this one,
 and reconnect. OAuth consent for the old domain does not transfer to the new
-one. See [connection troubleshooting](system/skills/system/references/setup.md).
+one. See [connection troubleshooting](system/skills/using-toolware/references/setup.md).
 
 ## Package and support
 

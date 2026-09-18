@@ -1,5 +1,5 @@
 ---
-name: tool-builder
+name: toolware-tool-builder
 description: Interview a user to turn a rough idea or recurring workflow into a useful Toolware app with durable data and callable tools. Use when the user wants help deciding what to build, asks to be interviewed, or needs suggestions for records, actions, and scope. Do not restart discovery for a complete specification, routine tool use, or a targeted fix.
 ---
 
@@ -12,7 +12,7 @@ brief that the existing builder can implement without repeating the interview.
 
 ## Ground the conversation
 
-Read [About Toolware](../system/references/about.md) before recommending a
+Read [About Toolware](../using-toolware/references/about.md) before recommending a
 shape. Toolware apps provide durable records and governed operations through
 the user's AI client. Tools in an app share data and access boundaries; an app
 does not create a bespoke website or deploy a new service.
@@ -22,13 +22,13 @@ with one concrete instance: what happened last time, what had to be remembered,
 and what the user wanted to do next. Ask only the missing part. Reflect the
 outcome back in their language and suggest the smallest useful first version.
 For a complete specification, summarize it and move to the handoff; do not
-force an interview. A simple fit question belongs in the existing `system`
+force an interview. A simple fit question belongs in the existing `using-toolware`
 skill, without a discovery session.
 
 No connection is needed to shape an idea. If a recommendation depends on a
 deployed feature, exact limit, integration, or existing app, inspect only the
 relevant live catalog and deployment status using the
-[Toolware workflow](../system/SKILL.md). Search for reuse once the outcome is
+[Toolware workflow](../using-toolware/SKILL.md). Search for reuse once the outcome is
 clear. If disconnected or denied access, continue with a provisional brief
 and name the specific capability to verify; never invent catalog results or
 claim the app is build-ready. A written brief is not a saved Toolware app
@@ -157,7 +157,7 @@ do not add a redundant approval gate. Never create drafts merely because an
 interview answer selected an option.
 
 Pass the latest brief, user decisions, remaining assumptions, and relevant
-live findings to the [existing builder](../system/SKILL.md). Use its build,
+live findings to the [existing builder](../using-toolware/SKILL.md). Use its build,
 authoring, and safety references for exact catalog discovery, validation,
 immutable drafts, isolated tests, and publication requirements. Continue in
 the same conversation; do not require a separate agent or another interview.

@@ -2,7 +2,7 @@
 
 For installation and connection guidance, start with the
 [quick start](README.md#install) and
-[connection troubleshooting](system/skills/system/references/setup.md).
+[connection troubleshooting](system/skills/using-toolware/references/setup.md).
 
 ## Contact support
 

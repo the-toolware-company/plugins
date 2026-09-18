@@ -16,17 +16,17 @@ uses browser OAuth managed by your client; no credentials belong in this package
 | `.claude-plugin/plugin.json` | Anthropic plugin metadata |
 | `.mcp.json` | Native client MCP connection |
 | `plugin.json` and `mcp.json` | Portable Agent Plugins 1.0.0 manifests |
-| `skills/system/SKILL.md` | Shared discovery, use, authoring, and safety workflow |
-| `skills/tool-builder/SKILL.md` | Guided interview, app suggestions, data model, and reviewable build brief |
+| `skills/using-toolware/SKILL.md` | Shared discovery, use, authoring, and safety workflow |
+| `skills/toolware-tool-builder/SKILL.md` | Guided interview, app suggestions, data model, and reviewable build brief |
 | `SETUP.md` | Connection verification |
 | `assets/system-mark.svg` | The Toolware Company listing icon |
 
-The plugin name, core skill name, and server key remain `system` to match the
-existing integration. Display names use Toolware; the publisher and repository
-marketplace use The Toolware Company.
+The core skill is `using-toolware` (Using Toolware). The plugin name and MCP
+server key remain `system` to match the existing integration. The publisher
+and repository marketplace use The Toolware Company.
 
 To shape an idea, ask: **“Interview me and help me design a Toolware app for
-tracking customer requests.”** The `tool-builder` skill asks focused questions,
+tracking customer requests.”** The `toolware-tool-builder` skill asks focused questions,
 suggests records and actions, and maintains a brief you can revise before
 building. You can start without a connection; deployment-dependent features
 remain provisional until verified. A complete specification goes straight to
@@ -34,7 +34,7 @@ the existing build workflow.
 
 ## Verify the connection
 
-Follow [setup](skills/system/references/setup.md). The stable MCP tools are
+Follow [setup](skills/using-toolware/references/setup.md). The stable MCP tools are
 `toggle_build_mode`, `system_catalog`, `system_use`, `system_tasks`, and
 `system_inbox`. Select use mode and perform an authenticated catalog read.
 Tool discovery alone is insufficient. Published app tools can also appear in
