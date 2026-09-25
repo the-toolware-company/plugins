@@ -10,8 +10,11 @@ published-tool use; read references only for the relevant cases below.
 
 ## Use published tools
 
-1. Select `toggle_build_mode({ mode: "use" })` if the current mode is unknown
-   or different. Reuse a mode already established in this task.
+1. When both live input schemas advertise `mode`, pass `mode: "use"` on every
+   `system_catalog` and `system_use` request. This does not persist a mode change;
+   omission uses the credential's persisted mode, not the previous request's mode.
+   Otherwise reuse known use mode, or call `toggle_build_mode({ mode: "use" })`
+   if it is unknown or different.
 2. Reuse discovered contracts unless access, enablement, publication, or catalog
    state changes. For a known app/tool with a missing contract, request
    `system_catalog({ action: "types", app: "...", tool: "..." })` directly.

@@ -2,15 +2,24 @@
 
 ## 1. Select use mode
 
-If the current mode is unknown or differs from use mode, call `toggle_build_mode`
-with an explicit target:
+When the live input schemas for both `system_catalog` and `system_use` advertise
+an optional `mode`, include `mode: "use"` on every discovery and execution
+request. This selects the consumer handler for that request only, without
+changing the credential's persisted mode. A catalog call with `mode: "use"`
+does not select use mode for a later `system_use`: include it on both, especially
+when persisted mode is build. Omitting it uses the persisted mode.
+
+When the live schemas do not advertise this option, omit it. Reuse use mode
+already established in this task; if the mode is unknown or different, call
+`toggle_build_mode` with an explicit target:
 
 ```json
 { "mode": "use" }
 ```
 
-It changes only the catalog/execution interface for the current credential.
-Do not repeat it when use mode is already established in this task.
+Only `toggle_build_mode` persists a mode change. Mode selects the interface;
+it never grants authorization. Add the supported request-mode field to the
+catalog examples below; otherwise use them with the established persisted mode.
 
 ## 2. Discover by outcome
 
