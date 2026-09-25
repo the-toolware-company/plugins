@@ -1,5 +1,6 @@
 /// <reference types="bun" />
 
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 import {
@@ -89,6 +90,10 @@ await Bun.write(
     {
       ...report,
       aggregates,
+      gradingFingerprint: createHash("sha256")
+        .update(await Bun.file(resolve(import.meta.dir, "../evals/system-skill/cases.ts")).bytes())
+        .digest("hex")
+        .slice(0, 16),
       measurementSummaries: summarizeMeasurements(results),
       regradedAt: new Date().toISOString(),
       results,

@@ -88,10 +88,12 @@ for (const relativePath of skillFiles) {
 const skillFingerprint = skillHash.digest("hex").slice(0, 16);
 const fingerprint = (value: string | Uint8Array): string =>
   createHash("sha256").update(value).digest("hex").slice(0, 16);
+const caseSource = await Bun.file(resolve(root, "evals/system-skill/cases.ts")).bytes();
+const gradingFingerprint = fingerprint(caseSource);
 const mockFingerprint = createHash("sha256")
   .update(await Bun.file(extensionPath).bytes())
   .update("\0")
-  .update(await Bun.file(resolve(root, "evals/system-skill/cases.ts")).bytes())
+  .update(caseSource)
   .digest("hex")
   .slice(0, 16);
 const scenarioFingerprints = Object.fromEntries(
@@ -435,6 +437,7 @@ if (options.dryRun) {
       {
         aggregates,
         finishedAt: new Date().toISOString(),
+        gradingFingerprint,
         label: options.label,
         model: options.model,
         mockFingerprint,

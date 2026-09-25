@@ -237,7 +237,7 @@ export default function mockSystem(
           )
         ) {
           throw new Error(
-            "TOOL_INPUT_INVALID: this finite fixture requires each intended part as a literal add_part input with its exact name and quantity.",
+            "TOOL_INPUT_INVALID: this finite fixture requires exact intended names and quantities in literal add_part inputs or one literal array mapped to add_part.",
           );
         }
         if (parts.some((part) => addedParts.has(part.name))) {

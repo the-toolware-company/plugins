@@ -45,6 +45,10 @@ skill, mock, scenarios and model settings so results cannot be confused across
 revisions. Reports retain every trial and group timing summaries by scenario
 and condition. Conditions are interleaved within each trial.
 
+Regrading preserves the original skill, mock, scenario and model-setting
+fingerprints and measurements, and records the current `gradingFingerprint`.
+This makes corrected grading rules explicit without repeating model calls.
+
 `typed-search-reuse` starts in an established use mode and asks for two reads
 through the same API. It expects one exact catalog response, no redundant mode
 toggle, and reuse of the declaration. The legacy `discover-and-run` case still
@@ -80,8 +84,18 @@ unmeasured. A single trial is not evidence of a stable percentile or speedup.
 
 These are synthetic agent checks, not production latency measurements. The mock
 recognizes a bounded set of fixture actions; it does not execute arbitrary
-JavaScript or contact real MCP/database services. Per-tool timing measures mock
-and adapter work, while total time includes the model, client and harness. Do
-not label the remaining time as pure model latency. Compare only matching
-scenario/mock fingerprints and model settings, recording the skill revision
-being compared; never pool unrelated scenarios to claim a speedup.
+JavaScript or contact real MCP/database services. Parts additions accept literal
+calls or one flat literal array (named or inline) mapped once to `add_part`,
+forwarding each entry unchanged. The map callback must directly forward the entry
+or use the observed
+try/catch receipt wrapper. Receipt fields may be reordered, include an optional
+entry shorthand and use any simple literal status label; the success result and
+captured error expressions are fixed. Other callback control flow, mutations,
+retries or dynamically generated array inputs are outside this finite fixture.
+Per-tool timing measures mock and adapter work, while total time includes the
+model, client and harness. Do not label the remaining time as pure model latency.
+Compare only matching scenario/mock fingerprints and model settings, recording the skill revision
+being compared; never pool unrelated scenarios to claim a speedup. Multi-statement
+result transformations are also outside the finite fixture: rejection of valid
+code makes that trial inconclusive, not evidence of agent or production-tool
+latency.
