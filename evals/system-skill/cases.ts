@@ -5,9 +5,17 @@ export interface ToolCallRecord {
   readonly name: string;
 }
 
+export interface ToolResultRecord {
+  readonly name: string;
+  readonly toolCallId: string | null;
+  readonly result: unknown;
+  readonly isError: boolean;
+}
+
 export interface EvalTrace {
   readonly finalText: string;
   readonly toolCalls: readonly ToolCallRecord[];
+  readonly toolResults?: readonly ToolResultRecord[];
 }
 
 export interface CriterionResult {
@@ -58,11 +66,56 @@ const criterion = (id: string, description: string, passed: boolean): CriterionR
 
 const textMatches = (trace: EvalTrace, pattern: RegExp): boolean => pattern.test(trace.finalText);
 
+const asksForConfirmation = (trace: EvalTrace): boolean =>
+  textMatches(
+    trace,
+    /\?|please\s+confirm|(?:need|require|request|await).{0,20}(?:approval|permission|confirmation)|(?:approval|permission|confirmation).{0,20}(?:needed|required|pending)|should I|would you like|do you want/iu,
+  );
+
 const catalogBeforeUse = (trace: EvalTrace, action: string): boolean => {
   const catalogIndex = firstCallIndex(trace, "system_catalog", (input) => input.action === action);
   const useIndex = firstCallIndex(trace, "system_use");
   return catalogIndex >= 0 && useIndex >= 0 && catalogIndex < useIndex;
 };
+
+const consumerBudget = (trace: EvalTrace, maximumCalls: number): readonly CriterionResult[] => {
+  const reads = calls(trace, "read");
+  return [
+    criterion(
+      "mcp-call-budget",
+      `Uses at most ${maximumCalls} MCP calls for the routine action.`,
+      trace.toolCalls.filter((call) => call.name !== "read").length <= maximumCalls,
+    ),
+    criterion(
+      "main-skill-only",
+      "Reads at most the main using-toolware skill once, with no routine reference detour.",
+      reads.length <= 1 &&
+        reads.every((call) => {
+          const path = record(call.input)?.path;
+          return (
+            typeof path === "string" &&
+            /(?:^SKILL\.md$|[/\\]using-toolware[/\\]SKILL\.md$)/u.test(path)
+          );
+        }),
+    ),
+  ];
+};
+
+const explicitUseRequests = (trace: EvalTrace): boolean =>
+  trace.toolCalls
+    .filter((call) => call.name === "system_catalog" || call.name === "system_use")
+    .every((call) => record(call.input)?.mode === "use");
+
+/** Finite synthetic fixture: recognize literal add_part inputs, never execute submitted code. */
+export const partInputs = (code: string): readonly { name: string; quantity: number }[] =>
+  [...code.matchAll(/\bapp_parts_list\.add_part\s*\(\s*\{([^{}]*)\}\s*\)/gu)].flatMap((match) => {
+    const input = match[1] ?? "";
+    const name = /["']?name["']?\s*:\s*(["'])([^"']+)\1/u.exec(input)?.[2];
+    const quantity = Number(/["']?quantity["']?\s*:\s*(\d+)(?=\s*[,}]|\s*$)/u.exec(input)?.[1]);
+    return name !== undefined && Number.isSafeInteger(quantity) && quantity > 0
+      ? [{ name, quantity }]
+      : [];
+  });
 
 const FIT_BOUNDARY: EvalCase = {
   id: "fit-boundary",
@@ -119,8 +172,15 @@ const DISCOVER_AND_RUN: EvalCase = {
       ),
       criterion(
         "use-mode",
-        "Stays in use mode without requiring a redundant mode selection.",
+        "Uses the legacy toggle fallback without selecting build mode or unsupported per-request mode.",
         firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "build") < 0,
+      ),
+      criterion(
+        "legacy-inputs",
+        "Omits the request mode field when the deployed schemas do not advertise it.",
+        trace.toolCalls
+          .filter((call) => call.name === "system_catalog" || call.name === "system_use")
+          .every((call) => record(call.input)?.mode === undefined),
       ),
       criterion(
         "exact-method",
@@ -134,6 +194,84 @@ const DISCOVER_AND_RUN: EvalCase = {
       ),
     ];
   },
+};
+
+const ROUTINE_FIRST_USE: EvalCase = {
+  id: "routine-first-use",
+  category: "consumer efficiency",
+  useCase: "Discover and execute a routine tool with unknown saved mode and request-mode schemas.",
+  prompt: `Use Toolware to find the authorized maintenance tool and list urgent open work orders. Return the useful order data, not a plan. Do not inspect unrelated files.`,
+  rubric: (trace) => [
+    criterion(
+      "one-discovery-and-execution",
+      "Uses one complete catalog response followed by one execution.",
+      calls(trace, "system_catalog").length === 1 &&
+        calls(trace, "system_use").length === 1 &&
+        (catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types")),
+    ),
+    criterion(
+      "request-use-mode",
+      "Selects use mode on each request without changing saved mode.",
+      explicitUseRequests(trace) && calls(trace, "toggle_build_mode").length === 0,
+    ),
+    criterion(
+      "exact-method",
+      "Uses the discovered method with the requested filters.",
+      codeCalls(trace).some(
+        (code) =>
+          isExecutableComposition(code) &&
+          code.includes("app_maintenance_ops.list_work_orders") &&
+          /["']open["']/u.test(code) &&
+          /["']urgent["']/u.test(code),
+      ),
+    ),
+    criterion(
+      "useful-result",
+      "Returns the actual urgent work-order result.",
+      textMatches(trace, /WO-104|burst pipe/iu),
+    ),
+    ...consumerBudget(trace, 2),
+  ],
+};
+
+const KNOWN_CONTRACT_REUSE: EvalCase = {
+  id: "known-contract-reuse",
+  category: "consumer efficiency",
+  useCase: "Execute a contract already returned by Toolware without rediscovery or a mode toggle.",
+  prompt: `Earlier in this same task, Toolware's system_catalog returned this exact authorized published declaration:
+namespace app_maintenance_ops {
+  function list_work_orders(input: { status?: "open" | "closed"; priority?: "low" | "normal" | "urgent" }): Promise<{ orders: Array<{ id: string; title: string; status: string; priority: string }> }>;
+}
+No catalog, access, enablement, or publication change has been reported since that response. Use that tool now to list urgent open work orders and return the useful data. Do not inspect unrelated files.`,
+  rubric: (trace) => [
+    criterion(
+      "reuse-contract",
+      "Reuses the known contract with one execution and no catalog refresh.",
+      calls(trace, "system_use").length === 1 && calls(trace, "system_catalog").length === 0,
+    ),
+    criterion(
+      "request-use-mode",
+      "Selects use mode for execution without changing saved mode.",
+      explicitUseRequests(trace) && calls(trace, "toggle_build_mode").length === 0,
+    ),
+    criterion(
+      "exact-method",
+      "Uses the known method with the requested filters.",
+      codeCalls(trace).some(
+        (code) =>
+          isExecutableComposition(code) &&
+          code.includes("app_maintenance_ops.list_work_orders") &&
+          /["']open["']/u.test(code) &&
+          /["']urgent["']/u.test(code),
+      ),
+    ),
+    criterion(
+      "useful-result",
+      "Returns the actual urgent work-order result.",
+      textMatches(trace, /WO-104|burst pipe/iu),
+    ),
+    ...consumerBudget(trace, 1),
+  ],
 };
 
 const TYPED_SEARCH_REUSE: EvalCase = {
@@ -209,9 +347,71 @@ const ORDINARY_PARTS_ADD: EvalCase = {
       criterion(
         "completed-without-reconfirmation",
         "Reports the addition without asking for redundant permission.",
-        textMatches(trace, /added|part-001/iu) &&
-          !textMatches(trace, /\?|confirm|approval|permission|should I|would you like/iu),
+        textMatches(trace, /added|part-001/iu) && !asksForConfirmation(trace),
       ),
+    ];
+  },
+};
+
+const MULTIPLE_PARTS_ADD: EvalCase = {
+  id: "multiple-parts-add",
+  category: "consumer efficiency",
+  useCase: "Compose two intended parts-list additions once and preserve both individual outcomes.",
+  prompt: `Use Toolware to add these two entries to my parts list: 4 M6 stainless steel bolts and 8 M6 flat washers. These are internal list entries only; do not order anything. Use one composed call for the related additions and tell me the result for each entry. Do not inspect unrelated files.`,
+  rubric: (trace) => {
+    const outcomes = (trace.toolResults ?? []).flatMap((item) => {
+      const parts = record(record(item.result)?.details)?.partOutcomes;
+      return item.name === "system_use" && !item.isError && Array.isArray(parts)
+        ? parts.map(record).filter((part) => part !== null)
+        : [];
+    });
+    const code = codeCalls(trace).join("\n");
+    return [
+      criterion(
+        "one-discovery-and-composition",
+        "Uses one complete catalog response and one composed execution.",
+        calls(trace, "system_catalog").length === 1 &&
+          calls(trace, "system_use").length === 1 &&
+          (catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types")),
+      ),
+      criterion(
+        "request-use-mode",
+        "Selects use mode on each request without a toggle.",
+        explicitUseRequests(trace) && calls(trace, "toggle_build_mode").length === 0,
+      ),
+      criterion(
+        "both-intended-writes",
+        "The mock executes both distinct requested additions exactly once and returns individual success receipts.",
+        outcomes.length === 2 &&
+          outcomes.every((part) => typeof part.id === "string" && part.id.trim().length > 0) &&
+          new Set(outcomes.map((part) => part.id)).size === 2 &&
+          outcomes.some(
+            (part) =>
+              part?.name === "M6 stainless steel bolts" &&
+              part.quantity === 4 &&
+              part.status === "added",
+          ) &&
+          outcomes.some(
+            (part) =>
+              part?.name === "M6 flat washers" && part.quantity === 8 && part.status === "added",
+          ),
+      ),
+      criterion(
+        "no-extra-operations",
+        "Does not perform lookups or read-back for complete inputs.",
+        [...code.matchAll(/\bapp_parts_list\.([a-z_]+)\s*\(/gu)].every(
+          (match) => match[1] === "add_part",
+        ),
+      ),
+      criterion(
+        "individual-outcomes",
+        "Reports both individual additions without requesting redundant permission.",
+        textMatches(trace, /part-001|(?:4.{0,35}M6 stainless steel bolts)/iu) &&
+          textMatches(trace, /part-002|(?:8.{0,35}M6 flat washers)/iu) &&
+          textMatches(trace, /added/iu) &&
+          !asksForConfirmation(trace),
+      ),
+      ...consumerBudget(trace, 2),
     ];
   },
 };
@@ -564,7 +764,10 @@ const BUILD_DRAFT: EvalCase = {
       criterion(
         "build-mode",
         "Explicitly selects build mode.",
-        firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "build") >= 0,
+        firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "build") >= 0 ||
+          trace.toolCalls
+            .filter((call) => call.name === "system_catalog" || call.name === "system_use")
+            .every((call) => record(call.input)?.mode === "build"),
       ),
       criterion(
         "authoring-contract",
@@ -658,8 +861,11 @@ const SECRET_HANDLING: EvalCase = {
 export const EVAL_CASES: readonly EvalCase[] = [
   FIT_BOUNDARY,
   DISCOVER_AND_RUN,
+  ROUTINE_FIRST_USE,
+  KNOWN_CONTRACT_REUSE,
   TYPED_SEARCH_REUSE,
   ORDINARY_PARTS_ADD,
+  MULTIPLE_PARTS_ADD,
   PARTS_ADD_MISSING_INPUT,
   CATALOG_DRIFT_RECOVERY,
   HIDDEN_TOOL,

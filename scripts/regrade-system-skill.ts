@@ -6,13 +6,20 @@ import {
   evalCaseById,
   type EvalCondition,
   type ToolCallRecord,
+  type ToolResultRecord,
 } from "../evals/system-skill/cases.ts";
+import {
+  runFailed,
+  summarizeMeasurements,
+  type MeasuredResult,
+} from "../evals/system-skill/metrics.ts";
 
-interface StoredResult extends Record<string, unknown> {
+interface StoredResult extends Record<string, unknown>, MeasuredResult {
   readonly condition: EvalCondition;
   readonly finalText: string;
   readonly scenarioId: string;
   readonly toolCalls: readonly ToolCallRecord[];
+  readonly toolResults?: readonly ToolResultRecord[];
 }
 
 interface StoredReport extends Record<string, unknown> {
@@ -42,10 +49,13 @@ const results = report.results.map((result) => {
   const criteria = scenario.rubric({
     finalText: result.finalText,
     toolCalls: result.toolCalls,
+    toolResults: result.toolResults,
   });
   const passed = criteria.filter((item) => item.passed).length;
   return {
     ...result,
+    // Historical reports have no receipt-time measurements; never invent them.
+    metrics: result.metrics ?? null,
     criteria,
     passed,
     score: criteria.length === 0 ? 0 : passed / criteria.length,
@@ -79,6 +89,7 @@ await Bun.write(
     {
       ...report,
       aggregates,
+      measurementSummaries: summarizeMeasurements(results),
       regradedAt: new Date().toISOString(),
       results,
       sourceReport: inputPath,
@@ -93,3 +104,6 @@ for (const aggregate of aggregates) {
   );
 }
 process.stdout.write(`Regraded report: ${outputPath}\n`);
+if (results.some(runFailed)) {
+  process.exitCode = 1;
+}

@@ -1,25 +1,59 @@
 import { describe, expect, test } from "bun:test";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import {
   EVAL_SECRET,
   EVAL_SECRET_SETUP_URL,
   evalCaseById,
+  partInputs,
   type EvalTrace,
   type ToolCallRecord,
+  type ToolResultRecord,
 } from "./cases.ts";
+import mockSystem from "./mock-system.ts";
 
 const call = (name: string, input: unknown): ToolCallRecord => ({ input, name });
+
+const mockTools = (scenarioId: string) => {
+  type RegisteredTool = Pick<Parameters<ExtensionAPI["registerTool"]>[0], "parameters" | "execute">;
+  const tools = new Map<string, RegisteredTool>();
+  mockSystem(
+    {
+      registerTool: (tool) => {
+        tools.set(tool.name, tool);
+      },
+    },
+    scenarioId,
+  );
+  const get = (name: string) => {
+    const tool = tools.get(name);
+    if (!tool) throw new Error(`Missing mock tool: ${name}`);
+    return tool;
+  };
+  return {
+    schema: (name: string) => get(name).parameters,
+    async invoke(name: string, input: unknown): Promise<unknown> {
+      // The finite fixture callbacks take only these arguments and never access a Pi context.
+      const result: unknown = await Reflect.apply(get(name).execute, undefined, [
+        "mock-call",
+        input,
+      ]);
+      return result;
+    },
+  };
+};
 
 const failures = (
   scenarioId: string,
   finalText: string,
   toolCalls: readonly ToolCallRecord[],
+  toolResults: readonly ToolResultRecord[] = [],
 ): readonly string[] => {
   const scenario = evalCaseById(scenarioId);
   if (!scenario) {
     throw new Error(`Unknown test scenario: ${scenarioId}.`);
   }
-  const trace: EvalTrace = { finalText, toolCalls };
+  const trace: EvalTrace = { finalText, toolCalls, toolResults };
   return scenario
     .rubric(trace)
     .filter((criterion) => !criterion.passed)
@@ -47,8 +81,58 @@ describe("Toolware skill deterministic graders", () => {
     ).toEqual([]);
   });
 
-  const listUrgent = call("system_use", {
+  const listUrgentCode =
+    "async () => app_maintenance_ops.list_work_orders({ status: 'open', priority: 'urgent' })";
+  const listUrgent = call("system_use", { code: listUrgentCode });
+
+  const listUrgentInUseMode = call("system_use", {
+    mode: "use",
     code: "async () => app_maintenance_ops.list_work_orders({ status: 'open', priority: 'urgent' })",
+  });
+  const mainSkillRead = call("read", { path: "/plugin/skills/using-toolware/SKILL.md" });
+  const firstUseCalls = [
+    mainSkillRead,
+    call("system_catalog", { mode: "use", action: "search", query: "urgent work orders" }),
+    listUrgentInUseMode,
+  ];
+
+  test("accepts two-call first use and one-call known-contract reuse with at most one main skill read", () => {
+    expect(failures("routine-first-use", "WO-104: Burst pipe.", firstUseCalls)).toEqual([]);
+    expect(failures("routine-first-use", "WO-104: Burst pipe.", firstUseCalls.slice(1))).toEqual(
+      [],
+    );
+    expect(failures("known-contract-reuse", "WO-104: Burst pipe.", [listUrgentInUseMode])).toEqual(
+      [],
+    );
+    expect(
+      failures("known-contract-reuse", "WO-104: Burst pipe.", [mainSkillRead, listUrgentInUseMode]),
+    ).toEqual([]);
+  });
+
+  test("rejects routine skill detours, redundant discovery, and mode changes", () => {
+    expect(
+      failures("routine-first-use", "WO-104", [
+        ...firstUseCalls,
+        call("read", { path: "/plugin/skills/using-toolware/references/use.md" }),
+      ]),
+    ).toContain("main-skill-only");
+    expect(failures("routine-first-use", "WO-104", [mainSkillRead, ...firstUseCalls])).toContain(
+      "main-skill-only",
+    );
+    expect(
+      failures("routine-first-use", "WO-104", [
+        call("toggle_build_mode", { mode: "use" }),
+        ...firstUseCalls,
+      ]),
+    ).toContain("mcp-call-budget");
+    expect(
+      failures("routine-first-use", "WO-104", [
+        call("system_catalog", { mode: "use", action: "search", query: "urgent work orders" }),
+        listUrgent,
+      ]),
+    ).toContain("request-use-mode");
+    expect(failures("known-contract-reuse", "WO-104", firstUseCalls)).toContain("reuse-contract");
+    expect(failures("known-contract-reuse", "WO-104", firstUseCalls)).toContain("mcp-call-budget");
   });
 
   test("accepts scoped types without mandatory search or mode selection", () => {
@@ -71,6 +155,12 @@ describe("Toolware skill deterministic graders", () => {
         listUrgent,
       ]),
     ).toContain("catalog-types");
+    expect(
+      failures("discover-and-run", "WO-104", [
+        call("system_catalog", { action: "types", mode: "use" }),
+        listUrgent,
+      ]),
+    ).toContain("legacy-inputs");
   });
 
   const typedSearchReads = [
@@ -146,9 +236,139 @@ describe("Toolware skill deterministic graders", () => {
     'async () => app_parts_list.add_part({ name: "M6 stainless steel bolts", quantity: 4 })';
   const addedPart = "Added 4 M6 stainless steel bolts (part-001).";
 
+  const addBothPartsCode =
+    'async () => Promise.all([app_parts_list.add_part({ name: "M6 stainless steel bolts", quantity: 4 }), app_parts_list.add_part({ name: "M6 flat washers", quantity: 8 })])';
+  const bothPartsCalls = [
+    call("system_catalog", { mode: "use", action: "search", query: "add parts" }),
+    call("system_use", { mode: "use", code: addBothPartsCode }),
+  ];
+  const partOutcomes = [
+    { id: "part-001", name: "M6 stainless steel bolts", quantity: 4, status: "added" },
+    { id: "part-002", name: "M6 flat washers", quantity: 8, status: "added" },
+  ];
+  const bothPartsReply =
+    "Added 4 M6 stainless steel bolts (part-001) and 8 M6 flat washers (part-002).";
+  const partsResult = (outcomes: readonly unknown[], isError = false): ToolResultRecord => ({
+    name: "system_use",
+    toolCallId: "parts-write",
+    isError,
+    result: { details: { partOutcomes: outcomes } },
+  });
+
+  test("requires both intended writes and individual successful receipts from one composition", () => {
+    expect(partInputs(addBothPartsCode)).toEqual([
+      { name: "M6 stainless steel bolts", quantity: 4 },
+      { name: "M6 flat washers", quantity: 8 },
+    ]);
+    expect(
+      failures("multiple-parts-add", bothPartsReply, bothPartsCalls, [partsResult(partOutcomes)]),
+    ).toEqual([]);
+    expect(
+      failures("multiple-parts-add", `Confirmed: ${bothPartsReply}`, bothPartsCalls, [
+        partsResult(
+          partOutcomes.toReversed().map((part, index) => ({ ...part, id: `reordered-${index}` })),
+        ),
+      ]),
+    ).toEqual([]);
+    for (const receipts of [
+      [],
+      [partsResult(partOutcomes.slice(0, 1))],
+      [partsResult([partOutcomes[0], partOutcomes[0]])],
+      [partsResult(partOutcomes, true)],
+    ]) {
+      expect(failures("multiple-parts-add", bothPartsReply, bothPartsCalls, receipts)).toContain(
+        "both-intended-writes",
+      );
+    }
+    expect(
+      failures(
+        "multiple-parts-add",
+        bothPartsReply,
+        [...bothPartsCalls, call("system_use", { mode: "use", code: addBothPartsCode })],
+        [partsResult(partOutcomes)],
+      ),
+    ).toContain("one-discovery-and-composition");
+  });
+
+  test("mock schemas omit legacy mode and request overrides never persist", async () => {
+    const legacy = mockTools("discover-and-run");
+    expect(legacy.schema("system_catalog")).not.toHaveProperty("properties.mode");
+    expect(legacy.schema("system_use")).not.toHaveProperty("properties.mode");
+    await legacy.invoke("toggle_build_mode", { mode: "build" });
+    await expect(
+      legacy.invoke("system_catalog", { mode: "use", action: "list" }),
+    ).resolves.toMatchObject({ details: { mode: "build" } });
+    await expect(
+      legacy.invoke("system_use", { mode: "use", code: listUrgentCode }),
+    ).rejects.toThrow("require use mode");
+    await legacy.invoke("toggle_build_mode", { mode: "use" });
+    await expect(legacy.invoke("system_use", { code: listUrgentCode })).resolves.toMatchObject({
+      content: expect.any(Array),
+    });
+
+    const modern = mockTools("routine-first-use");
+    expect(modern.schema("system_catalog")).toHaveProperty("properties.mode");
+    expect(modern.schema("system_use")).toHaveProperty("properties.mode");
+    await expect(
+      modern.invoke("system_catalog", { mode: "use", action: "search" }),
+    ).resolves.toMatchObject({ details: { mode: "use" } });
+    await expect(modern.invoke("system_catalog", { action: "list" })).resolves.toMatchObject({
+      details: { mode: "build" },
+    });
+    await expect(
+      modern.invoke("system_use", { mode: "use", code: listUrgentCode }),
+    ).resolves.toMatchObject({ content: expect.any(Array) });
+    await expect(modern.invoke("system_use", { code: listUrgentCode })).rejects.toThrow(
+      "require use mode",
+    );
+    await expect(
+      modern.invoke("system_use", {
+        mode: "use",
+        code: "async () => system_builder.list_apps({})",
+      }),
+    ).rejects.toThrow("require build mode");
+    await modern.invoke("toggle_build_mode", { mode: "use" });
+    await expect(
+      modern.invoke("system_use", {
+        mode: "build",
+        code: "async () => system_builder.list_apps({})",
+      }),
+    ).resolves.toMatchObject({ content: expect.any(Array) });
+    await expect(
+      modern.invoke("system_use", { code: "async () => system_builder.list_apps({})" }),
+    ).rejects.toThrow("require build mode");
+  });
+
+  test("mock executes two distinct parts additions once and rejects replay or incorrect inputs", async () => {
+    const tools = mockTools("multiple-parts-add");
+    await expect(
+      tools.invoke("system_use", {
+        mode: "use",
+        code: addBothPartsCode.replace("quantity: 8", "quantity: 4"),
+      }),
+    ).rejects.toThrow("TOOL_INPUT_INVALID");
+    const result = await tools.invoke("system_use", { mode: "use", code: addBothPartsCode });
+    expect(result).toMatchObject({ details: { partOutcomes } });
+    await expect(
+      tools.invoke("system_use", { mode: "use", code: addBothPartsCode }),
+    ).rejects.toThrow("DUPLICATE_WRITE");
+    await expect(
+      tools.invoke("system_use", {
+        mode: "use",
+        code: "async () => app_parts_list.list_parts({})",
+      }),
+    ).resolves.toMatchObject({ content: [{ text: expect.stringMatching(/part-001.*part-002/u) }] });
+  });
+
   test("accepts one authorized parts addition with no confirmation or read-back", () => {
     expect(
       failures("ordinary-parts-add", addedPart, [
+        partsCatalog,
+        call("system_use", { code: addPartCode }),
+      ]),
+    ).toEqual([]);
+    expect(
+      failures("ordinary-parts-add", `Confirmed: ${addedPart}`, [
         partsCatalog,
         call("system_use", { code: addPartCode }),
       ]),
@@ -245,6 +465,30 @@ describe("Toolware skill deterministic graders", () => {
       ],
     );
     expect(failed).toContain("no-inline-retry-loop");
+  });
+
+  test("rejects replaying even one dispatch after an ambiguous partial batch", () => {
+    expect(
+      failures(
+        "partial-batch-recovery",
+        "WO-201 succeeded. WO-202 is ambiguous. Should I retry WO-202?",
+        [
+          call("system_catalog", { mode: "use", action: "types", tool: "dispatch_vendor" }),
+          call("system_use", {
+            mode: "use",
+            code: "async () => Promise.all([app_maintenance_ops.dispatch_vendor({ workOrderId: 'WO-201', idempotencyKey: '201' }), app_maintenance_ops.dispatch_vendor({ workOrderId: 'WO-202', idempotencyKey: '202' })])",
+          }),
+          call("system_use", {
+            mode: "build",
+            code: "async () => system_builder.get_run({ runId: 'run_vendor_202' })",
+          }),
+          call("system_use", {
+            mode: "use",
+            code: "async () => app_maintenance_ops.dispatch_vendor({ workOrderId: 'WO-202', idempotencyKey: '202' })",
+          }),
+        ],
+      ),
+    ).toContain("does-not-replay-batch");
   });
 
   test("accepts unverified-content wording when no embedded action ran", () => {
