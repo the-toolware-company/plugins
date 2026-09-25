@@ -12,13 +12,15 @@ connected Toolware MCP server for both consumption and authoring.
 
 1. Treat the connected server as the source of truth. Never guess a catalog
    namespace, method, builder action input, or tool schema.
-2. Use `toggle_build_mode({ mode: "use" | "build" })` explicitly. Use mode is
-   for published business tools; build mode is also the management surface for
+2. Use `toggle_build_mode({ mode: "use" | "build" })` when the current mode is
+   unknown or differs from the task. Reuse a mode already established in this
+   task. Use mode is for published business tools; build mode is also the management surface for
    run inspection/retry, releases, access, secrets, integrations, automation,
    and authoring. The choice is credential-scoped and idempotent; it is not an
    authorization grant.
-3. In either mode, inspect `system_catalog` before composing calls with
-   `system_use`.
+3. Compose `system_use` calls only from exact contracts returned by
+   `system_catalog`. Reuse contracts already discovered in this task unless
+   the catalog or relevant access, enablement, or publication state changes.
 4. Every operation runs as the authenticated user and is authorized again at
    call time. Catalog visibility alone is not authority.
 5. Pause for informed user confirmation before publishing new authority,
@@ -63,9 +65,12 @@ exact schemas, or a deployment feature that may vary.
 
 ## Default use workflow
 
-1. Select use mode.
-2. Search by the user's desired outcome.
-3. Load exact generated types for the selected app or tool.
+1. Select use mode if the current mode is unknown or different.
+2. If the exact app and tool are known, request their scoped types directly;
+   otherwise search by the user's desired outcome.
+3. Use complete exact declarations returned by search when available. If the
+   response contains only summaries or omits the selected declaration, load
+   scoped types. Skip discovery when this task already has the current contract.
 4. Show the user material inputs and side effects when relevant.
 5. Compose the smallest useful `system_use` program and return its useful final
    result.

@@ -2,27 +2,38 @@
 
 ## 1. Select use mode
 
-Call `toggle_build_mode` with an explicit target:
+If the current mode is unknown or differs from use mode, call `toggle_build_mode`
+with an explicit target:
 
 ```json
 { "mode": "use" }
 ```
 
-This is safe to repeat. It changes only the catalog/execution interface for
-the current credential.
+It changes only the catalog/execution interface for the current credential.
+Do not repeat it when use mode is already established in this task.
 
 ## 2. Discover by outcome
 
-Search before choosing a tool:
+Reuse an exact contract already discovered in this task when it is still
+current. If the exact app and tool are known but their contract is missing,
+request scoped types directly:
+
+```json
+{ "action": "types", "app": "maintenance_ops", "tool": "list_work_orders" }
+```
+
+Otherwise search by the user's desired outcome:
 
 ```json
 { "action": "search", "query": "record a customer escalation" }
 ```
 
 `system_catalog` supports `list`, `search`, `describe`, and `types` in use mode.
-Use `describe` with both the exact app and tool names returned by search. Use
-`types` for exact generated JavaScript namespaces, method names, input types,
-and output types.
+Search may return complete exact generated declarations: JavaScript namespaces,
+method names, input types, and output types. Use them directly with `system_use`.
+If search returns only summaries or omits the selected declaration, request
+`types` scoped to that app and tool. Use `describe` only for additional metadata
+needed for the task; it is not a required step before types or execution.
 
 Never infer namespace sanitization from an app name and never reuse a stale
 schema after access, enablement, or publication changes.
@@ -99,7 +110,9 @@ Authorization is checked during every underlying call, not just discovery. If
 tool, or schema mismatch:
 
 1. Stop using the old method declaration.
-2. Refresh `system_catalog` search/types.
+2. Refresh scoped `system_catalog` types, or search again if the tool identity
+   is no longer known. Use complete returned declarations or fetch scoped types
+   when the response contains only summaries.
 3. Rebuild the smallest call against the new declaration.
 4. Do not weaken or bypass the failed check.
 

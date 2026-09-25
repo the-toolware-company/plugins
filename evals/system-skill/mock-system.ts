@@ -89,6 +89,9 @@ const catalogText = (
   if (input.action === "types" || input.action === "describe") {
     return useTypes(catalogDrifted);
   }
+  if (scenarioId === "typed-search-reuse" && input.action === "search") {
+    return `App maintenance_ops: list_work_orders lists authorized work orders with status and priority filters. Exact declarations for these matches follow; call system_use directly when they cover the task.\n${useTypes(catalogDrifted)}`;
+  }
   if (scenarioId === "partial-batch-recovery") {
     return `App maintenance_ops: tool dispatch_vendor sends an external vendor dispatch with a stable idempotency key. Namespace app_maintenance_ops. Load action=types before execution.`;
   }
@@ -306,8 +309,17 @@ export default function mockSystem(pi: ExtensionAPI): void {
         if (scenarioId === "catalog-drift-recovery") {
           catalogDrifted = true;
           throw new Error(
-            "CATALOG_STALE: maintenance_ops advanced from version 3 to version 4. Refresh search and exact types before rebuilding the call.",
+            "CATALOG_STALE: maintenance_ops advanced from version 3 to version 4. Refresh exact types before rebuilding the call.",
           );
+        }
+        if (scenarioId === "typed-search-reuse") {
+          const orders = [
+            { id: "WO-104", title: "Burst pipe in unit 4B", status: "open", priority: "urgent" },
+            { id: "WO-105", title: "Loose door handle", status: "open", priority: "normal" },
+          ].filter(
+            (order) => code.includes(`"${order.priority}"`) || code.includes(`'${order.priority}'`),
+          );
+          return result(JSON.stringify({ orders }));
         }
         return result(
           JSON.stringify({

@@ -47,6 +47,78 @@ describe("Toolware skill deterministic graders", () => {
     ).toEqual([]);
   });
 
+  const listUrgent = call("system_use", {
+    code: "async () => app_maintenance_ops.list_work_orders({ status: 'open', priority: 'urgent' })",
+  });
+
+  test("accepts scoped types without mandatory search or mode selection", () => {
+    expect(
+      failures("discover-and-run", "WO-104: Burst pipe (open, urgent).", [
+        call("system_catalog", {
+          action: "types",
+          app: "maintenance_ops",
+          tool: "list_work_orders",
+        }),
+        listUrgent,
+      ]),
+    ).toEqual([]);
+  });
+
+  test("requires types when the deployed search response contains only summaries", () => {
+    expect(
+      failures("discover-and-run", "WO-104: Burst pipe (open, urgent).", [
+        call("system_catalog", { action: "search", query: "urgent work orders" }),
+        listUrgent,
+      ]),
+    ).toContain("catalog-types");
+  });
+
+  const typedSearchReads = [
+    call("system_catalog", { action: "search", query: "open work orders" }),
+    listUrgent,
+    call("system_use", {
+      code: "async () => app_maintenance_ops.list_work_orders({ status: 'open', priority: 'normal' })",
+    }),
+  ];
+  const bothOrders = "WO-104: Burst pipe (urgent). WO-105: Loose door handle (normal).";
+
+  test("accepts typed search and reuses its declaration for a second read", () => {
+    expect(failures("typed-search-reuse", bothOrders, typedSearchReads)).toEqual([]);
+  });
+
+  test("rejects redundant discovery and undiscovered calls in the typed-search case", () => {
+    expect(
+      failures("typed-search-reuse", bothOrders, [
+        ...typedSearchReads.slice(0, 2),
+        call("system_catalog", { action: "types", app: "maintenance_ops" }),
+        ...typedSearchReads.slice(2),
+      ]),
+    ).toContain("single-discovery");
+    expect(failures("typed-search-reuse", bothOrders, typedSearchReads.slice(1))).toContain(
+      "exact-contract",
+    );
+  });
+
+  test("accepts direct type refresh after drift and rejects reuse without refresh", () => {
+    const initialCalls = [
+      call("system_catalog", { action: "types", app: "maintenance_ops" }),
+      listUrgent,
+    ];
+    const updatedCall = call("system_use", {
+      code: "async () => app_maintenance_ops.query_work_orders({ filter: { statuses: ['open'], priorities: ['urgent'] } })",
+    });
+    expect(
+      failures("catalog-drift-recovery", "WO-208: Elevator alarm.", [
+        ...initialCalls,
+        call("system_catalog", { action: "types", app: "maintenance_ops" }),
+        updatedCall,
+      ]),
+    ).toEqual([]);
+    expect(
+      failures("catalog-drift-recovery", "WO-208: Elevator alarm.", [...initialCalls, updatedCall]),
+    ).toEqual(["refreshes-after-failure", "uses-updated-declaration"]);
+  });
+
   test("accepts ordered catalog-drift recovery", () => {
     expect(
       failures(
