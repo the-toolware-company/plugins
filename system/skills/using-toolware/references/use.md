@@ -40,23 +40,24 @@ schema after access, enablement, or publication changes.
 
 ## 3. Compose with `system_use`
 
-Pass one async JavaScript arrow function as `code`:
+Look up only missing required identifiers or prerequisites; never invent them.
+Ask for missing input when a lookup cannot supply it. Pass one async JavaScript
+arrow function as `code`, using the exact discovered method:
 
 ```js
-async () => {
-  const incident = await app_incident_ops.incident_create({
-    title: "Database latency",
-    severity: "high",
-  });
-  return app_incident_ops.incident_report({ incidentId: incident.id });
-}
+async () => app_parts_list.add_part({ name: "M6 stainless steel bolts", quantity: 4 })
 ```
 
 Use only namespaces and methods returned by the current catalog.
 
-If a discovered method returns `unknown`, return its result unchanged first.
-After a successful call, refresh `system_catalog` types before accessing result
-fields; the server can learn an advisory shape for the current caller.
+A successful result can confirm the operation. Do not add a verification read
+unless the result lacks needed evidence or the user requests it. Compose related
+intended actions once and preserve their individual outcomes.
+
+If a discovered method returns `unknown`, return its result unchanged; no type
+refresh is needed just to present the data. Refresh `system_catalog` types before
+subsequent code depends on its fields; the server can learn an advisory shape
+for the current caller.
 
 Sandbox rules:
 
@@ -78,8 +79,10 @@ calls an external API, or triggers background work:
 1. Read its description and generated input type.
 2. Summarize the material action and target when the user's request is not
    already explicit.
-3. Obtain confirmation for destructive, externally visible, financially
-   meaningful, credential-changing, or otherwise privileged effects.
+3. Treat an explicit, well-scoped request as authorization for an ordinary
+   action; do not ask for redundant confirmation. Still obtain required
+   confirmation for destructive, externally visible, financially meaningful,
+   credential-changing, or otherwise privileged effects.
 4. Reuse stable business idempotency values when the schema provides them.
 
 Do not automatically retry an external write after a timeout or ambiguous

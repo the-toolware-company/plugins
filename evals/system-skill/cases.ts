@@ -172,6 +172,79 @@ const TYPED_SEARCH_REUSE: EvalCase = {
   },
 };
 
+const ORDINARY_PARTS_ADD: EvalCase = {
+  id: "ordinary-parts-add",
+  category: "tool use",
+  useCase: "Add a fully specified internal list item once without confirmation or read-back.",
+  prompt: `Use Toolware to add 4 M6 stainless steel bolts to my parts list. This is a list entry only; do not order anything. Earlier in this task, Toolware confirmed this credential is in use mode. Do not inspect unrelated files.`,
+  rubric: (trace) => {
+    const code = codeCalls(trace).join("\n");
+    return [
+      criterion(
+        "exact-contract",
+        "Discovers the exact parts tool contract before execution.",
+        catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types"),
+      ),
+      criterion(
+        "one-mutation",
+        "Composes exactly one intended parts-list addition.",
+        [...code.matchAll(/\bapp_parts_list\.add_part\s*\(/gu)].length === 1,
+      ),
+      criterion(
+        "complete-input",
+        "Supplies the requested part and quantity.",
+        code.includes("M6 stainless steel bolts") &&
+          /["']?quantity["']?\s*:\s*4(?=\s*[,}])/u.test(code),
+      ),
+      criterion(
+        "no-extra-calls",
+        "Avoids extra discovery, lookups, read-back, and mode changes for complete input.",
+        calls(trace, "system_catalog").length === 1 &&
+          calls(trace, "system_use").length === 1 &&
+          calls(trace, "toggle_build_mode").length === 0 &&
+          [...code.matchAll(/\bapp_parts_list\.([a-z_]+)\s*\(/gu)].every(
+            (match) => match[1] === "add_part",
+          ),
+      ),
+      criterion(
+        "completed-without-reconfirmation",
+        "Reports the addition without asking for redundant permission.",
+        textMatches(trace, /added|part-001/iu) &&
+          !textMatches(trace, /\?|confirm|approval|permission|should I|would you like/iu),
+      ),
+    ];
+  },
+};
+
+const PARTS_ADD_MISSING_INPUT: EvalCase = {
+  id: "parts-add-missing-input",
+  category: "tool use",
+  useCase:
+    "Ask for a required quantity instead of inventing an input or adding a part prematurely.",
+  prompt: `Use Toolware to add M6 stainless steel bolts to my parts list. This is a list entry only; do not order anything. Earlier in this task, Toolware confirmed this credential is in use mode. Do not inspect unrelated files.`,
+  rubric: (trace) => [
+    criterion(
+      "inspects-contract",
+      "Inspects the live contract to identify the missing required input.",
+      firstCallIndex(
+        trace,
+        "system_catalog",
+        (input) => input.action === "search" || input.action === "types",
+      ) >= 0,
+    ),
+    criterion(
+      "no-invented-quantity",
+      "Does not add a part before the user supplies the required quantity.",
+      !codeCalls(trace).join("\n").includes("app_parts_list.add_part"),
+    ),
+    criterion(
+      "asks-quantity",
+      "Asks the user for the missing quantity.",
+      textMatches(trace, /how many|what quantity|which quantity|quantity.{0,30}\?/iu),
+    ),
+  ],
+};
+
 const CATALOG_DRIFT_RECOVERY: EvalCase = {
   id: "catalog-drift-recovery",
   category: "schema recovery",
@@ -586,6 +659,8 @@ export const EVAL_CASES: readonly EvalCase[] = [
   FIT_BOUNDARY,
   DISCOVER_AND_RUN,
   TYPED_SEARCH_REUSE,
+  ORDINARY_PARTS_ADD,
+  PARTS_ADD_MISSING_INPUT,
   CATALOG_DRIFT_RECOVERY,
   HIDDEN_TOOL,
   AMBIGUOUS_RETRY,

@@ -141,6 +141,61 @@ describe("Toolware skill deterministic graders", () => {
     ).toEqual([]);
   });
 
+  const partsCatalog = call("system_catalog", { action: "search", query: "add a part" });
+  const addPartCode =
+    'async () => app_parts_list.add_part({ name: "M6 stainless steel bolts", quantity: 4 })';
+  const addedPart = "Added 4 M6 stainless steel bolts (part-001).";
+
+  test("accepts one authorized parts addition with no confirmation or read-back", () => {
+    expect(
+      failures("ordinary-parts-add", addedPart, [
+        partsCatalog,
+        call("system_use", { code: addPartCode }),
+      ]),
+    ).toEqual([]);
+  });
+
+  test("rejects duplicate additions, unnecessary read-back, and confirmation", () => {
+    expect(
+      failures("ordinary-parts-add", addedPart, [
+        partsCatalog,
+        call("system_use", { code: addPartCode }),
+        call("system_use", { code: addPartCode }),
+      ]),
+    ).toContain("one-mutation");
+    expect(
+      failures("ordinary-parts-add", addedPart, [
+        partsCatalog,
+        call("system_use", {
+          code: 'async () => { await app_parts_list.add_part({ name: "M6 stainless steel bolts", quantity: 4 }); return app_parts_list.list_parts({}); }',
+        }),
+      ]),
+    ).toContain("no-extra-calls");
+    expect(
+      failures("ordinary-parts-add", "Should I add 4 M6 stainless steel bolts?", [partsCatalog]),
+    ).toContain("completed-without-reconfirmation");
+  });
+
+  test("requires the requested quantity and asks when the user has not supplied it", () => {
+    expect(
+      failures("ordinary-parts-add", addedPart, [
+        partsCatalog,
+        call("system_use", { code: addPartCode.replace("quantity: 4", "quantity: 1") }),
+      ]),
+    ).toContain("complete-input");
+    expect(
+      failures("parts-add-missing-input", "How many M6 stainless steel bolts should I add?", [
+        partsCatalog,
+      ]),
+    ).toEqual([]);
+    expect(
+      failures("parts-add-missing-input", "How many M6 stainless steel bolts should I add?", [
+        partsCatalog,
+        call("system_use", { code: addPartCode }),
+      ]),
+    ).toContain("no-invented-quantity");
+  });
+
   test("accepts a fresh ambiguity confirmation question", () => {
     expect(
       failures(
