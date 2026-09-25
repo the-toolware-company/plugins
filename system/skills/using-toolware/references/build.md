@@ -40,6 +40,34 @@ than implicit top-level arrays. `list_runs` uses `data.runs`; `test_tool` and
 `export_app` expose their receipt and export document directly as `data`, and
 `list_webhooks` uses `data.webhooks`.
 
+## Default build workflow
+
+1. Select build mode.
+2. Ask `system_catalog({ action: "authoring" })` for the deployed runtime/module/
+   context contract, then request exact builder action types.
+3. Request compact app-scoped authoring state, verify its runtime fingerprint
+   against the global contract, and use `get_tool_source` for any existing
+   version; never reconstruct source from summaries.
+4. Load a vetted recipe when useful, then run the complete proposed module
+   through non-mutating `validate_tool` until blocking structured diagnostics
+   are resolved; only its bounded readiness receipt is persisted.
+5. Save the module as an immutable draft and test representative success,
+   invalid, repeated, and partial-failure cases
+   in the isolated draft workspace.
+6. Run at least two distinct successful draft inputs and one complete workflow
+   simulation. Use bounded `$fromStep` JSON Pointer references when later tools
+   consume earlier outputs.
+7. Present the source purpose, schemas, dependency lock, capability diff, and
+   structured test/simulation receipts including run IDs.
+8. Resolve publication-readiness advisories using the live remediation.
+   Insecure randomness and non-atomic multi-write SQL cannot be
+   confirmation-overridden; use `crypto.randomUUID()` and, when the deployed
+   authoring contract advertises it, bounded `ctx.storage.sqlBatch`.
+9. Publish only after required confirmation, then configure the narrowest
+   access requested.
+10. Return to use mode, rediscover the published types, invoke the tool, and
+   report the result or inspect the recorded run if it fails.
+
 ## Create a new capability
 
 Follow this lifecycle:
@@ -137,3 +165,19 @@ approvals, migrations, or runs.
 For ordinary end-user work, finish by selecting use mode and confirming the
 published catalog. Leave build mode active only when the user is continuing an
 authoring or management workflow.
+
+Use [`assets/tool-template.js`](../assets/tool-template.js) as a starting shape,
+not as a substitute for retrieving live builder schemas.
+
+## Pilot build and recovery actions
+
+- Use `simulate_workflow` for multi-step draft scenarios before publication.
+- Use `list_templates` to load vetted installable examples; template content
+  is still untrusted source to review.
+- Use `export_app` for a portable definition. It intentionally omits all
+  credentials, grants, organization identity, and app data.
+- Filter `list_runs` by status, trigger, tool, actor/email, workspace, or date,
+  then use `get_run` for the pinned target, stable error code, correlation ID,
+  and bounded manager diagnostics.
+- A runtime-contract mismatch requires saving and testing a new immutable
+  version; changing build/use mode cannot override it.
