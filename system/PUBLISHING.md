@@ -1,15 +1,52 @@
 # Publish Toolware
 
-Release: **0.3.2** (prepared for submission). Publisher: **The Toolware Company**.
+Release: **0.3.3** (GitHub marketplace). Publisher: **The Toolware Company**.
 Package: `system`. Git marketplace: `the-toolware-company`.
 Endpoint: **https://thetoolware.company/mcp**.
 
+## Release 0.3.3
+
+The consumer skill now gives routine tool use a shorter path: reuse complete
+search declarations, call known contracts directly, and use request-scoped mode
+when the server advertises it. Legacy mode selection remains supported.
+
+Build guidance uses save-time validation receipts, follows the live evidence
+requirements for closed empty-input tools, and verifies publication with reads
+unless the user requested a real production mutation. Recovery guidance preserves
+confirmed successes and uses host execution receipts without replaying completed
+writes. Consumer evaluations now record call budgets and timing with explicit
+scenario and grading provenance.
+
 ## Current readiness
+
+Clean package candidate `0fc684b` passed:
+
+- `bun run validate`: formatting, TypeScript, 42 deterministic grading and
+  measurement tests (180 assertions), synchronized metadata, and Claude's strict
+  plugin and marketplace validation.
+- `bun run test:install`: isolated Codex and Claude marketplace installs using
+  temporary client configuration directories.
+
+These checks used the clean release candidate, excluding unrelated local edits.
+They do not establish hosted authentication or tool execution behavior.
+
+On 28 September 2026, production `/status` attested release
+`e7869af2a6133b23175c617616e6b51ec946b922`, build
+`acf01b61-fc4e-49af-bcc9-39f0fa1bfc7b`, and runtime contract `2026-08-19.1`.
+`bun run test:live` passed against that release: healthy status, anonymous MCP
+access rejection, and production OAuth discovery. The deployment also passed
+the exact release/fingerprint check and invalid-bearer rejection check.
+
+Authenticated hosted canaries remain pending. These public checks do not
+establish successful hosted build, publication, or tool execution.
+
+### Historical verification
 
 The package is distributed through the GitHub marketplace. Official directory
 submission has separate business and legal requirements below. Package validation,
 isolated installs, and production discovery were rerun on 16 September 2026.
-They established:
+The following results apply to that earlier package and service release, not
+release 0.3.3:
 
 - The distribution repository is public at
   <https://github.com/the-toolware-company/plugins>.
@@ -62,7 +99,7 @@ Official directory submission gates:
 
 | Destination | Distribution | Next requirement |
 | --- | --- | --- |
-| Toolware GitHub marketplace | Codex and Claude Code package 0.3.1 is available | Install commands are in the public README; no public-directory approval is implied. |
+| Toolware GitHub marketplace | Codex and Claude Code package 0.3.3 is available | Install commands are in the public README; no public-directory approval is implied. |
 | [OpenAI Plugins Directory](https://platform.openai.com/plugins) | One reviewed listing for ChatGPT and Codex, with MCP and skills | Sign in to the publisher organisation; verified identity, final policies, domain challenge, working reviewer account, and actual client testing. |
 | [Claude community marketplace](https://platform.claude.com/plugins/submit) | Reviewed plugin containing skills and MCP | Sign in to Console; submit the public repository and plugin subdirectory `system`. |
 | [Claude Connectors Directory](https://claude.ai/admin-settings/directory/submissions/new) | Remote MCP connector | Team/Enterprise organisation with directory management access, reviewer account and completed connector checks. |
@@ -74,10 +111,10 @@ this document does not claim they are complete.
 
 ## Testing status and reference commands
 
-Browser OAuth lifecycle tests, authenticated catalog scenarios, and live tool
-annotation checks were not rerun as part of this package release. If a
-submission form requests evidence or attestations, distinguish those untested
-workflows from the checks above.
+Authenticated hosted canaries, browser OAuth lifecycle tests, and live tool
+annotation checks remain pending for this release. Public discovery checks do
+not satisfy official directory review requirements. If a submission form requests evidence or attestations,
+distinguish these untested workflows from the completed package checks above.
 
 From the repository root:
 

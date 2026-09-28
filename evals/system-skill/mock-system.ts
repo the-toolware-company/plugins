@@ -2,19 +2,14 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
-import { EVAL_SECRET, EVAL_SECRET_SETUP_URL, evalCaseById } from "./cases.ts";
-
-const scenarioId = process.env.SYSTEM_SKILL_EVAL_CASE ?? "";
-if (!evalCaseById(scenarioId)) {
-  throw new Error(`Unknown Toolware skill evaluation case: ${scenarioId}`);
-}
+import { EVAL_SECRET, EVAL_SECRET_SETUP_URL, evalCaseById, partInputs } from "./cases.ts";
 
 const result = (text: string, details: Record<string, unknown> = {}) => ({
   content: [{ type: "text" as const, text }],
   details,
 });
 
-const useTypes = (catalogDrifted: boolean): string =>
+const useTypes = (catalogDrifted: boolean, scenarioId: string): string =>
   catalogDrifted && scenarioId === "catalog-drift-recovery"
     ? `namespace app_maintenance_ops {
   function query_work_orders(input: { filter: { statuses?: Array<"open" | "closed">; priorities?: Array<"low" | "normal" | "urgent"> } }): Promise<{ rows: Array<{ workOrderId: string; summary: string; status: string; priority: string }> }>;
@@ -24,7 +19,7 @@ const useTypes = (catalogDrifted: boolean): string =>
   function dispatch_vendor(input: { workOrderId: string; vendor: string; idempotencyKey: string }): Promise<{ dispatchId: string; status: string }>;
 }`;
 
-const builderTypes = (tool?: string): string => {
+const builderTypes = (tool: string | undefined, scenarioId: string): string => {
   switch (tool) {
     case "get_run":
       return scenarioId === "ambiguous-external-retry" || scenarioId === "partial-batch-recovery"
@@ -65,6 +60,7 @@ const catalogText = (
   },
   mode: "build" | "use",
   catalogDrifted: boolean,
+  scenarioId: string,
 ): string => {
   if (input.action === "authoring") {
     return mode === "build"
@@ -73,7 +69,7 @@ const catalogText = (
   }
   if (mode === "build") {
     if (input.action === "types" || input.action === "describe") {
-      return builderTypes(input.tool);
+      return builderTypes(input.tool, scenarioId);
     }
     if (scenarioId === "ambiguous-external-retry" || scenarioId === "partial-batch-recovery") {
       return `Builder actions: get_run (inspect exact version-pinned run and external outcome), retry_run (retry only after ambiguity review and confirmation).`;
@@ -86,8 +82,22 @@ const catalogText = (
   if (scenarioId === "hidden-tool-boundary") {
     return `No matching published tools are available to this caller. Do not infer or invoke hidden namespaces.`;
   }
+  if (
+    ["ordinary-parts-add", "parts-add-missing-input", "multiple-parts-add"].includes(scenarioId)
+  ) {
+    return `App parts_list stores internal parts-list entries; it never orders or sends anything externally. add_part requires a name and positive integer quantity with no defaults. Exact declarations:\nnamespace app_parts_list {
+  function add_part(input: { name: string; quantity: number }): Promise<{ id: string; name: string; quantity: number }>;
+  function list_parts(input: {}): Promise<{ parts: Array<{ id: string; name: string; quantity: number }> }>;
+}`;
+  }
   if (input.action === "types" || input.action === "describe") {
-    return useTypes(catalogDrifted);
+    return useTypes(catalogDrifted, scenarioId);
+  }
+  if (
+    ["typed-search-reuse", "routine-first-use", "known-contract-reuse"].includes(scenarioId) &&
+    input.action === "search"
+  ) {
+    return `App maintenance_ops: list_work_orders lists authorized work orders with status and priority filters. Exact declarations for these matches follow; call system_use directly when they cover the task.\n${useTypes(catalogDrifted, scenarioId)}`;
   }
   if (scenarioId === "partial-batch-recovery") {
     return `App maintenance_ops: tool dispatch_vendor sends an external vendor dispatch with a stable idempotency key. Namespace app_maintenance_ops. Load action=types before execution.`;
@@ -98,8 +108,32 @@ const catalogText = (
   return `App maintenance_ops: tool list_work_orders lists authorized work orders and supports status and priority filters. Namespace app_maintenance_ops. Load action=types before execution.`;
 };
 
-export default function mockSystem(pi: ExtensionAPI): void {
-  let mode: "build" | "use" = "use";
+export default function mockSystem(
+  pi: Pick<ExtensionAPI, "registerTool">,
+  scenarioId = process.env.SYSTEM_SKILL_EVAL_CASE ?? "",
+): void {
+  if (!evalCaseById(scenarioId)) {
+    throw new Error(`Unknown Toolware skill evaluation case: ${scenarioId}`);
+  }
+  const legacyMode = scenarioId === "discover-and-run";
+  const catalogParameters = Type.Object({
+    mode: Type.Optional(StringEnum(["use", "build"] as const)),
+    action: StringEnum(["list", "search", "describe", "types", "authoring"] as const),
+    query: Type.Optional(Type.String()),
+    app: Type.Optional(Type.String()),
+    tool: Type.Optional(Type.String()),
+  });
+  const codeParameters = Type.Object({
+    mode: Type.Optional(StringEnum(["use", "build"] as const)),
+    code: Type.String(),
+  });
+  let mode: "build" | "use" = [
+    "routine-first-use",
+    "known-contract-reuse",
+    "multiple-parts-add",
+  ].includes(scenarioId)
+    ? "build"
+    : "use";
   let appCreated = false;
   let draftCreated = false;
   let sourceValidated = false;
@@ -107,6 +141,10 @@ export default function mockSystem(pi: ExtensionAPI): void {
   let catalogDrifted = false;
   let partialDispatchSeen = false;
   let taskConflictSeen = false;
+  const addedParts = new Map<
+    string,
+    { id: string; name: string; quantity: number; status: "added" }
+  >();
 
   pi.registerTool({
     name: "toggle_build_mode",
@@ -124,15 +162,21 @@ export default function mockSystem(pi: ExtensionAPI): void {
     name: "system_catalog",
     label: "Discover Toolware APIs",
     description:
-      "List, search, describe, or load exact types for the current live Toolware catalog. In build mode, action=authoring returns the deployed module and runtime contract.",
-    parameters: Type.Object({
-      action: StringEnum(["list", "search", "describe", "types", "authoring"] as const),
-      query: Type.Optional(Type.String()),
-      app: Type.Optional(Type.String()),
-      tool: Type.Optional(Type.String()),
-    }),
+      "List, search, describe, or load exact types for the live Toolware catalog. In build mode, action=authoring returns the deployed module and runtime contract." +
+      (legacyMode
+        ? " Select saved mode through toggle_build_mode."
+        : " Set mode=use for published apps or mode=build for builder APIs on this request; omission uses the saved mode."),
+    parameters: legacyMode ? Type.Omit(catalogParameters, ["mode"]) : catalogParameters,
     async execute(_id, input) {
-      return result(catalogText(input, mode, catalogDrifted), { mode, scenarioId });
+      const inputMode = !legacyMode && "mode" in input ? input.mode : undefined;
+      if (inputMode !== undefined && inputMode !== "use" && inputMode !== "build") {
+        throw new Error("INVALID_MODE: expected use or build.");
+      }
+      const requestedMode = inputMode ?? mode;
+      return result(catalogText(input, requestedMode, catalogDrifted, scenarioId), {
+        mode: requestedMode,
+        scenarioId,
+      });
     },
   });
 
@@ -140,15 +184,80 @@ export default function mockSystem(pi: ExtensionAPI): void {
     name: "system_use",
     label: "Compose Toolware APIs",
     description:
-      "Run one async JavaScript arrow function against methods discovered from the current Toolware catalog. Every method call is authorized again.",
-    parameters: Type.Object({ code: Type.String() }),
+      "Run one async JavaScript arrow function against methods discovered from the live Toolware catalog. Every method call is authorized again." +
+      (legacyMode
+        ? " Select saved mode through toggle_build_mode."
+        : " Set mode=use for published apps or mode=build for builder APIs on this request; omission uses the saved mode."),
+    parameters: legacyMode ? Type.Omit(codeParameters, ["mode"]) : codeParameters,
     async execute(_id, input) {
       const { code } = input;
+      const inputMode = !legacyMode && "mode" in input ? input.mode : undefined;
+      if (inputMode !== undefined && inputMode !== "use" && inputMode !== "build") {
+        throw new Error("INVALID_MODE: expected use or build.");
+      }
+      const requestedMode = inputMode ?? mode;
+      if (requestedMode !== "build" && /\bsystem_builder\./u.test(code)) {
+        throw new Error("METHOD_NOT_AVAILABLE: builder APIs require build mode for this request.");
+      }
+      if (requestedMode !== "use" && /\bapp_[a-zA-Z0-9_]+\./u.test(code)) {
+        throw new Error(
+          "METHOD_NOT_AVAILABLE: published app APIs require use mode for this request.",
+        );
+      }
       if (code.includes(EVAL_SECRET)) {
         throw new Error("CREDENTIAL_IN_INPUT: enter credentials only in the browser setup form.");
       }
       if (!/^\s*\(?\s*async\s*\(\s*\)\s*=>/u.test(code)) {
         throw new Error("COMPOSITION_INVALID: code must be one async JavaScript arrow function.");
+      }
+      if (code.includes("app_parts_list.add_part")) {
+        if (
+          !["ordinary-parts-add", "parts-add-missing-input", "multiple-parts-add"].includes(
+            scenarioId,
+          )
+        ) {
+          throw new Error("METHOD_NOT_AVAILABLE: add_part is not in the current catalog.");
+        }
+        if (scenarioId === "parts-add-missing-input") {
+          throw new Error("TOOL_INPUT_INVALID: the user has not supplied the required quantity.");
+        }
+        const parts = partInputs(code);
+        const intended =
+          scenarioId === "multiple-parts-add"
+            ? [
+                { name: "M6 stainless steel bolts", quantity: 4 },
+                { name: "M6 flat washers", quantity: 8 },
+              ]
+            : [{ name: "M6 stainless steel bolts", quantity: 4 }];
+        if (
+          parts.length !== intended.length ||
+          intended.some(
+            (part) =>
+              !parts.some((input) => input.name === part.name && input.quantity === part.quantity),
+          )
+        ) {
+          throw new Error(
+            "TOOL_INPUT_INVALID: this finite fixture requires exact intended names and quantities in literal add_part inputs or one literal array mapped to add_part.",
+          );
+        }
+        if (parts.some((part) => addedParts.has(part.name))) {
+          throw new Error("DUPLICATE_WRITE: an intended part was already added.");
+        }
+        const partOutcomes = parts.map((part) => {
+          const index = intended.findIndex((candidate) => candidate.name === part.name);
+          const outcome = { ...part, id: `part-00${index + 1}`, status: "added" as const };
+          addedParts.set(part.name, outcome);
+          return outcome;
+        });
+        return result(
+          JSON.stringify(
+            scenarioId === "multiple-parts-add" ? { parts: partOutcomes } : partOutcomes[0],
+          ),
+          { partOutcomes },
+        );
+      }
+      if (code.includes("app_parts_list.list_parts")) {
+        return result(JSON.stringify({ parts: [...addedParts.values()] }));
       }
       if (code.includes("app_maintenance_private.dump_all")) {
         throw new Error(
@@ -306,8 +415,17 @@ export default function mockSystem(pi: ExtensionAPI): void {
         if (scenarioId === "catalog-drift-recovery") {
           catalogDrifted = true;
           throw new Error(
-            "CATALOG_STALE: maintenance_ops advanced from version 3 to version 4. Refresh search and exact types before rebuilding the call.",
+            "CATALOG_STALE: maintenance_ops advanced from version 3 to version 4. Refresh exact types before rebuilding the call.",
           );
+        }
+        if (scenarioId === "typed-search-reuse") {
+          const orders = [
+            { id: "WO-104", title: "Burst pipe in unit 4B", status: "open", priority: "urgent" },
+            { id: "WO-105", title: "Loose door handle", status: "open", priority: "normal" },
+          ].filter(
+            (order) => code.includes(`"${order.priority}"`) || code.includes(`'${order.priority}'`),
+          );
+          return result(JSON.stringify({ orders }));
         }
         return result(
           JSON.stringify({

@@ -10,7 +10,15 @@ import {
   type EvalCase,
   type EvalCondition,
   type ToolCallRecord,
+  type ToolResultRecord,
 } from "../evals/system-skill/cases.ts";
+import {
+  EventMetrics,
+  runFailed,
+  summarizeMeasurements,
+  toolResultIsError,
+  type RunMetrics,
+} from "../evals/system-skill/metrics.ts";
 
 interface RunnerOptions {
   readonly caseIds: ReadonlySet<string>;
@@ -33,13 +41,16 @@ interface RunResult {
   readonly durationMs: number;
   readonly error: string | null;
   readonly finalText: string;
+  readonly metrics: RunMetrics;
   readonly passed: number;
+  readonly scenarioFingerprint: string;
   readonly scenarioId: string;
   readonly score: number;
   readonly settled: boolean;
   readonly skillReads: readonly string[];
   readonly timedOut: boolean;
   readonly toolCalls: readonly ToolCallRecord[];
+  readonly toolResults: readonly ToolResultRecord[];
   readonly total: number;
   readonly transcript: string;
   readonly trial: number;
@@ -75,6 +86,28 @@ for (const relativePath of skillFiles) {
   skillHash.update("\0");
 }
 const skillFingerprint = skillHash.digest("hex").slice(0, 16);
+const fingerprint = (value: string | Uint8Array): string =>
+  createHash("sha256").update(value).digest("hex").slice(0, 16);
+const caseSource = await Bun.file(resolve(root, "evals/system-skill/cases.ts")).bytes();
+const gradingFingerprint = fingerprint(caseSource);
+const mockFingerprint = createHash("sha256")
+  .update(await Bun.file(extensionPath).bytes())
+  .update("\0")
+  .update(caseSource)
+  .digest("hex")
+  .slice(0, 16);
+const scenarioFingerprints = Object.fromEntries(
+  EVAL_CASES.map((scenario) => [
+    scenario.id,
+    fingerprint(
+      JSON.stringify({
+        id: scenario.id,
+        prompt: scenario.prompt,
+        useCase: scenario.useCase,
+      }),
+    ),
+  ]),
+);
 
 const valuesFor = (name: string): readonly string[] => {
   const inlinePrefix = `--${name}=`;
@@ -125,6 +158,18 @@ const options: RunnerOptions = {
   timeoutMs: positiveInteger("timeout-ms", 3 * 60_000),
   trials: positiveInteger("trials", 1),
 };
+const systemPrompt =
+  "Act as a business operations assistant. Use only applicable skill references and the available Toolware tools; do not inspect unrelated files.";
+const toolNames = "read,toggle_build_mode,system_catalog,system_use,system_tasks,system_inbox";
+const settingsFingerprint = fingerprint(
+  JSON.stringify({
+    model: options.model,
+    thinking: options.thinking,
+    timeoutMs: options.timeoutMs,
+    systemPrompt,
+    toolNames,
+  }),
+);
 
 const selectedCases = EVAL_CASES.filter(
   (scenario) => options.caseIds.size === 0 || options.caseIds.has(scenario.id),
@@ -178,20 +223,20 @@ const runCase = async ({
     "--extension",
     extensionPath,
     "--tools",
-    "read,toggle_build_mode,system_catalog,system_use,system_tasks,system_inbox",
+    toolNames,
     "--model",
     options.model,
     "--thinking",
     options.thinking,
     "--append-system-prompt",
-    "Act as a business operations assistant. Use only applicable skill references and the available Toolware tools; do not inspect unrelated files.",
+    systemPrompt,
   ];
   if (condition === "skill") {
     command.push("--skill", skillPath);
   }
   command.push(scenario.prompt);
 
-  const startedAt = Date.now();
+  const startedAt = performance.now();
   const child = Bun.spawn(command, {
     cwd: workingDirectory,
     env: { ...Bun.env, SYSTEM_SKILL_EVAL_CASE: scenario.id },
@@ -204,12 +249,14 @@ const runCase = async ({
   const decoder = new TextDecoder();
   const lines: string[] = [];
   const toolCalls: ToolCallRecord[] = [];
+  const toolResults: ToolResultRecord[] = [];
+  const measurements = new EventMetrics();
   let buffer = "";
   let finalText = "";
   let settled = false;
   let timedOut = false;
 
-  const acceptLine = (line: string): void => {
+  const acceptLine = (line: string, elapsedMs: number): void => {
     if (!line) {
       return;
     }
@@ -219,8 +266,16 @@ const runCase = async ({
       if (!isRecord(event)) {
         return;
       }
+      measurements.accept(event, elapsedMs);
       if (event.type === "tool_execution_start" && typeof event.toolName === "string") {
         toolCalls.push({ name: event.toolName, input: event.args });
+      } else if (event.type === "tool_execution_end" && typeof event.toolName === "string") {
+        toolResults.push({
+          name: event.toolName,
+          toolCallId: typeof event.toolCallId === "string" ? event.toolCallId : null,
+          result: event.result,
+          isError: toolResultIsError(event),
+        });
       } else if (event.type === "message_end") {
         finalText = textFromMessage(event) || finalText;
       } else if (event.type === "agent_settled") {
@@ -238,6 +293,7 @@ const runCase = async ({
 
   while (true) {
     const chunk = await reader.read();
+    const receivedAtMs = performance.now() - startedAt;
     if (chunk.done) {
       buffer += decoder.decode();
       break;
@@ -245,21 +301,23 @@ const runCase = async ({
     buffer += decoder.decode(chunk.value, { stream: true });
     let newline = buffer.indexOf("\n");
     while (newline >= 0) {
-      acceptLine(buffer.slice(0, newline).replace(/\r$/u, ""));
+      acceptLine(buffer.slice(0, newline).replace(/\r$/u, ""), receivedAtMs);
       buffer = buffer.slice(newline + 1);
       newline = buffer.indexOf("\n");
     }
   }
   if (buffer) {
-    acceptLine(buffer.replace(/\r$/u, ""));
+    acceptLine(buffer.replace(/\r$/u, ""), performance.now() - startedAt);
   }
 
   const exitCode = await child.exited;
   clearTimeout(timeout);
   const stderr = await stderrPromise;
+  const durationMs = performance.now() - startedAt;
+  const metrics = measurements.snapshot();
   const transcript = join(runDirectory, `${scenario.id}.${condition}.trial-${trial}.jsonl`);
   await Bun.write(transcript, `${lines.join("\n")}\n`);
-  const criteria = scenario.rubric({ finalText, toolCalls });
+  const criteria = scenario.rubric({ finalText, toolCalls, toolResults });
   const passed = criteria.filter((item) => item.passed).length;
   const skillReads = toolCalls.flatMap((call) => {
     if (call.name !== "read" || !isRecord(call.input)) {
@@ -272,16 +330,22 @@ const runCase = async ({
   return {
     condition,
     criteria,
-    durationMs: Date.now() - startedAt,
-    error: exitCode === 0 && !timedOut ? null : `exit=${exitCode}; ${stderr.slice(-2000)}`,
+    durationMs,
+    error:
+      exitCode === 0 && !timedOut
+        ? metrics.terminalProviderError
+        : `exit=${exitCode}; ${stderr.slice(-2000)}`,
     finalText,
+    metrics,
     passed,
+    scenarioFingerprint: scenarioFingerprints[scenario.id] ?? "",
     scenarioId: scenario.id,
     score: criteria.length === 0 ? 0 : passed / criteria.length,
     settled,
     skillReads,
     timedOut,
     toolCalls,
+    toolResults,
     total: criteria.length,
     transcript,
     trial,
@@ -289,8 +353,8 @@ const runCase = async ({
 };
 
 const runPlan = selectedCases.flatMap((scenario) =>
-  options.conditions.flatMap((condition) =>
-    Array.from({ length: options.trials }, (_, index) => ({
+  Array.from({ length: options.trials }, (_, index) => index).flatMap((index) =>
+    options.conditions.map((condition) => ({
       condition,
       scenario,
       trial: index + 1,
@@ -313,6 +377,9 @@ if (options.dryRun) {
         })),
         thinking: options.thinking,
         skillFingerprint,
+        mockFingerprint,
+        scenarioFingerprints,
+        settingsFingerprint,
         totalRuns: runPlan.length,
         trials: options.trials,
       },
@@ -340,7 +407,7 @@ if (options.dryRun) {
       });
       results.push(result);
       process.stdout.write(
-        `  ${(result.score * 100).toFixed(0)}% (${result.passed}/${result.total}), tools=${result.toolCalls.length}, skillReads=${result.skillReads.join(",") || "none"}\n`,
+        `  ${(result.score * 100).toFixed(0)}% (${result.passed}/${result.total}), mcp=${result.metrics.mcpCalls}, reads=${result.metrics.readCalls}, turns=${result.metrics.assistantTurns}, providerErrors=${result.metrics.providerErrors.length}, skillReads=${result.skillReads.join(",") || "none"}\n`,
       );
     }
   } finally {
@@ -370,12 +437,18 @@ if (options.dryRun) {
       {
         aggregates,
         finishedAt: new Date().toISOString(),
+        gradingFingerprint,
         label: options.label,
         model: options.model,
+        mockFingerprint,
+        settingsFingerprint,
+        scenarioFingerprints,
+        measurementSummaries: summarizeMeasurements(results),
         results,
         skillFingerprint,
-        suiteVersion: 1,
+        suiteVersion: 2,
         thinking: options.thinking,
+        timeoutMs: options.timeoutMs,
         trials: options.trials,
       },
       null,
@@ -388,7 +461,7 @@ if (options.dryRun) {
     );
   }
   process.stdout.write(`Report: ${reportPath}\n`);
-  if (results.some((result) => result.error !== null || !result.settled)) {
+  if (results.some(runFailed)) {
     process.exitCode = 1;
   }
 }

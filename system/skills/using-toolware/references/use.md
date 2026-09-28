@@ -2,50 +2,71 @@
 
 ## 1. Select use mode
 
-Call `toggle_build_mode` with an explicit target:
+When the live input schemas for both `system_catalog` and `system_use` advertise
+an optional `mode`, include `mode: "use"` on every discovery and execution
+request. This selects the consumer handler for that request only, without
+changing the credential's persisted mode. A catalog call with `mode: "use"`
+does not select use mode for a later `system_use`: include it on both, especially
+when persisted mode is build. Omitting it uses the persisted mode.
+
+When the live schemas do not advertise this option, omit it. Reuse use mode
+already established in this task; if the mode is unknown or different, call
+`toggle_build_mode` with an explicit target:
 
 ```json
 { "mode": "use" }
 ```
 
-This is safe to repeat. It changes only the catalog/execution interface for
-the current credential.
+Only `toggle_build_mode` persists a mode change. Mode selects the interface;
+it never grants authorization. Add the supported request-mode field to the
+catalog examples below; otherwise use them with the established persisted mode.
 
 ## 2. Discover by outcome
 
-Search before choosing a tool:
+Reuse an exact contract already discovered in this task when it is still
+current. If the exact app and tool are known but their contract is missing,
+request scoped types directly:
+
+```json
+{ "action": "types", "app": "maintenance_ops", "tool": "list_work_orders" }
+```
+
+Otherwise search by the user's desired outcome:
 
 ```json
 { "action": "search", "query": "record a customer escalation" }
 ```
 
 `system_catalog` supports `list`, `search`, `describe`, and `types` in use mode.
-Use `describe` with both the exact app and tool names returned by search. Use
-`types` for exact generated JavaScript namespaces, method names, input types,
-and output types.
+Search may return complete exact generated declarations: JavaScript namespaces,
+method names, input types, and output types. Use them directly with `system_use`.
+If search returns only summaries or omits the selected declaration, request
+`types` scoped to that app and tool. Use `describe` only for additional metadata
+needed for the task; it is not a required step before types or execution.
 
 Never infer namespace sanitization from an app name and never reuse a stale
 schema after access, enablement, or publication changes.
 
 ## 3. Compose with `system_use`
 
-Pass one async JavaScript arrow function as `code`:
+Look up only missing required identifiers or prerequisites; never invent them.
+Ask for missing input when a lookup cannot supply it. Pass one async JavaScript
+arrow function as `code`, using the exact discovered method:
 
 ```js
-async () => {
-  const incident = await app_incident_ops.incident_create({
-    title: "Database latency",
-    severity: "high",
-  });
-  return app_incident_ops.incident_report({ incidentId: incident.id });
-}
+async () => app_parts_list.add_part({ name: "M6 stainless steel bolts", quantity: 4 })
 ```
 
 Use only namespaces and methods returned by the current catalog.
 
-If a discovered method returns `unknown`, return its result unchanged first.
-After a successful call, refresh `system_catalog` types before accessing result
-fields; the server can learn an advisory shape for the current caller.
+A successful result can confirm the operation. Do not add a verification read
+unless the result lacks needed evidence or the user requests it. Compose related
+intended actions once and preserve their individual outcomes.
+
+If a discovered method returns `unknown`, return its result unchanged; no type
+refresh is needed just to present the data. Refresh `system_catalog` types before
+subsequent code depends on its fields; the server can learn an advisory shape
+for the current caller.
 
 Sandbox rules:
 
@@ -67,8 +88,10 @@ calls an external API, or triggers background work:
 1. Read its description and generated input type.
 2. Summarize the material action and target when the user's request is not
    already explicit.
-3. Obtain confirmation for destructive, externally visible, financially
-   meaningful, credential-changing, or otherwise privileged effects.
+3. Treat an explicit, well-scoped request as authorization for an ordinary
+   action; do not ask for redundant confirmation. Still obtain required
+   confirmation for destructive, externally visible, financially meaningful,
+   credential-changing, or otherwise privileged effects.
 4. Reuse stable business idempotency values when the schema provides them.
 
 Do not automatically retry an external write after a timeout or ambiguous
@@ -86,6 +109,11 @@ substitute for inspecting the version-pinned run. Use `retry_run` only after
 the run evidence and required confirmation support it.
 
 When a composed call partially succeeds, preserve the per-method run evidence.
+When present, the host's `execution` receipt identifies the composition run and
+ordered call outcomes. `succeeded` means that call completed; `failed` and
+`unconfirmed` do not establish rollback. `not_started` means it did not execute.
+An output-size error can follow completed writes: do not repeat them merely to
+produce a smaller response. The receipt intentionally omits tool outputs.
 Do not replay the composition or any confirmed success. Switch to build mode,
 inspect each ambiguous run ID, and separate successful, failed, and unknown
 targets in the response. If completing the original request would require an
@@ -99,7 +127,9 @@ Authorization is checked during every underlying call, not just discovery. If
 tool, or schema mismatch:
 
 1. Stop using the old method declaration.
-2. Refresh `system_catalog` search/types.
+2. Refresh scoped `system_catalog` types, or search again if the tool identity
+   is no longer known. Use complete returned declarations or fetch scoped types
+   when the response contains only summaries.
 3. Rebuild the smallest call against the new declaration.
 4. Do not weaken or bypass the failed check.
 

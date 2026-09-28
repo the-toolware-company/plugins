@@ -62,17 +62,18 @@ Durable constraints enforce at most one draft and one published version;
 updating supersedes the prior unpublished draft. Never reconstruct a version
 from catalog summaries.
 
-Run complete proposed source through `validate_tool` before create/update. The
-operation shares the real dependency, bundle, module, schema, capability, and
-runtime preparation path but returns `persisted: false`, does not execute the
-handler, and writes no version/source/workspace/run state. It records one
-bounded content-addressed readiness receipt. Treat advisories as quality
-guidance and errors as blockers. `ok: true` means preparation succeeded, not
-that an unsaved proposal is ready: inspect `qualityGate`,
-`publicationReadiness`, and `nextSteps`. The same evaluator reads real evidence
-when source matches a saved draft, so a fully exercised draft reports `ready`.
-Create and update receipts repeat those fields; do not discard them after
-saving.
+Create/update prepare the complete source and return `qualityGate`,
+`publicationReadiness`, and `nextSteps`; use that receipt to choose the next
+operation. When it records validation evidence, do not separately validate
+unchanged source. If an older deployment still reports missing validation,
+call `validate_tool` with the exact source and dependencies.
+
+Use `validate_tool` for an optional non-mutating preview. It shares the save
+path's dependency, bundle, module, schema, capability and runtime checks, but
+returns `persisted: false`, does not execute the handler, and writes no version,
+source, workspace or run state. It records one bounded content-addressed
+readiness receipt. `ok: true` means preparation succeeded, not publication
+readiness. Treat errors as blockers and review the returned advisories.
 
 The unscoped authoring response also includes `qualityHelpers`. Each helper
 maps stable AST diagnostic codes to a short repair pattern and, where useful,
@@ -89,8 +90,8 @@ session even when the execution runtime fingerprint has not changed.
 
 On failure, use `structuredContent.error.code`, `phase`, `path`, `expected`,
 `actual`, `retryable`, and `remediation`, or parse the identical JSON text
-fallback; do not scrape prose or stack traces. Validate again after a focused
-repair. `retryable` never grants permission to repeat a potentially external
+fallback; do not scrape prose or stack traces. Save the repaired draft, or
+validate again if only previewing. `retryable` never grants permission to repeat a potentially external
 write.
 
 ## Contract rules
@@ -217,8 +218,12 @@ prior mutations rolled back.
 Later workflow inputs may consume prior results with
 `{ "$fromStep": { "step": 1, "pointer": "/id" } }`. References are limited to
 earlier completed steps and bounded RFC 6901 pointers. Before publication,
-collect matching validation evidence, two distinct successful `test_tool`
-inputs, and one successful workflow simulation. Every input must satisfy the
+collect the live receipt's required validation and behavior evidence. Ordinarily
+this is two distinct successful `test_tool` inputs and one successful workflow
+simulation. A deployment may advertise one successful empty-input test for a
+closed schema accepting only `{}`; its workflow must still exercise useful
+state changes, such as listing before and after adding a record. Do not invent
+dummy parameters or weaken the schema to obtain a second input. Every input must satisfy the
 immutable input schema; `TOOL_INPUT_INVALID` attempts do not count toward
 either evidence requirement. Repair insecure randomness and
 non-atomic multi-write SQL advisories using APIs advertised by the live

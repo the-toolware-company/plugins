@@ -5,9 +5,17 @@ export interface ToolCallRecord {
   readonly name: string;
 }
 
+export interface ToolResultRecord {
+  readonly name: string;
+  readonly toolCallId: string | null;
+  readonly result: unknown;
+  readonly isError: boolean;
+}
+
 export interface EvalTrace {
   readonly finalText: string;
   readonly toolCalls: readonly ToolCallRecord[];
+  readonly toolResults?: readonly ToolResultRecord[];
 }
 
 export interface CriterionResult {
@@ -58,10 +66,129 @@ const criterion = (id: string, description: string, passed: boolean): CriterionR
 
 const textMatches = (trace: EvalTrace, pattern: RegExp): boolean => pattern.test(trace.finalText);
 
+const asksForConfirmation = (trace: EvalTrace): boolean =>
+  textMatches(
+    trace,
+    /\?|please\s+confirm|(?:need|require|request|await).{0,20}(?:approval|permission|confirmation)|(?:approval|permission|confirmation).{0,20}(?:needed|required|pending)|should I|would you like|do you want/iu,
+  );
+
 const catalogBeforeUse = (trace: EvalTrace, action: string): boolean => {
   const catalogIndex = firstCallIndex(trace, "system_catalog", (input) => input.action === action);
   const useIndex = firstCallIndex(trace, "system_use");
   return catalogIndex >= 0 && useIndex >= 0 && catalogIndex < useIndex;
+};
+
+const consumerBudget = (trace: EvalTrace, maximumCalls: number): readonly CriterionResult[] => {
+  const reads = calls(trace, "read");
+  return [
+    criterion(
+      "mcp-call-budget",
+      `Uses at most ${maximumCalls} MCP calls for the routine action.`,
+      trace.toolCalls.filter((call) => call.name !== "read").length <= maximumCalls,
+    ),
+    criterion(
+      "main-skill-only",
+      "Reads at most the main using-toolware skill once, with no routine reference detour.",
+      reads.length <= 1 &&
+        reads.every((call) => {
+          const path = record(call.input)?.path;
+          return (
+            typeof path === "string" &&
+            /(?:^SKILL\.md$|[/\\]using-toolware[/\\]SKILL\.md$)/u.test(path)
+          );
+        }),
+    ),
+  ];
+};
+
+const explicitUseRequests = (trace: EvalTrace): boolean =>
+  trace.toolCalls
+    .filter((call) => call.name === "system_catalog" || call.name === "system_use")
+    .every((call) => record(call.input)?.mode === "use");
+
+const literalPart = (input: string): readonly { name: string; quantity: number }[] => {
+  const nameField = /["']?name["']?\s*:\s*(["'])([^"']+)\1/u;
+  const quantityField = /["']?quantity["']?\s*:\s*(\d+)(?=\s*[,}]|\s*$)/u;
+  const name = nameField.exec(input)?.[2];
+  const quantity = Number(quantityField.exec(input)?.[1]);
+  const remaining = input.replace(nameField, "").replace(quantityField, "").replace(/[\s,]/gu, "");
+  return name !== undefined && Number.isSafeInteger(quantity) && quantity > 0 && remaining === ""
+    ? [{ name, quantity }]
+    : [];
+};
+
+const partReceiptFields = (
+  input: string,
+  item: string,
+  requiredName: "result" | "error",
+  requiredValue: string,
+): boolean => {
+  const source = input.trim().replace(/,\s*$/u, "");
+  const fields = [
+    ...source.matchAll(
+      /(?:^|,)\s*([\w$]+)(?:\s*:\s*("[^"\\\r\n]*"|'[^'\\\r\n]*'|[^,{}"'`]+?))?\s*(?=,|$)/gu,
+    ),
+  ];
+  return (
+    fields.map((field) => field[0]).join("") === source &&
+    new Set(fields.map((field) => field[1])).size === fields.length &&
+    fields.some(
+      ([, key, value]) => key === requiredName && value?.replace(/\s+/gu, "") === requiredValue,
+    ) &&
+    fields.every(
+      ([, key, value]) =>
+        (key === item && value === undefined) ||
+        (key === "status" && /^(?:"[^"\\\r\n]*"|'[^'\\\r\n]*')$/u.test(value?.trim() ?? "")) ||
+        (key === requiredName && value?.replace(/\s+/gu, "") === requiredValue),
+    )
+  );
+};
+
+/** Finite fixture forms: literal calls or one literal array mapped once to add_part. No execution. */
+export const partInputs = (code: string): readonly { name: string; quantity: number }[] => {
+  const direct = [...code.matchAll(/\bapp_parts_list\.add_part\s*\(\s*\{([^{}]*)\}\s*\)/gu)];
+  if (direct.length > 0) {
+    const inputs = direct.flatMap((match) => literalPart(match[1] ?? ""));
+    return inputs.length === direct.length &&
+      direct.length === [...code.matchAll(/\bapp_parts_list\.add_part\s*\(/gu)].length
+      ? inputs
+      : [];
+  }
+  const mapped =
+    /^\s*\(?\s*async\s*\(\s*\)\s*=>\s*\{\s*const\s+([\w$]+)\s*=\s*\[([^\[\]]*)\]\s*;\s*return\s+Promise\.(?:all|allSettled)\(\s*\1\.map\(\s*(async\s+)?\(?\s*([\w$]+)\s*\)?\s*=>\s*([\s\S]*)\)\s*\)\s*;?\s*\}\s*\)?\s*$/u
+      .exec(code)
+      ?.slice(2) ??
+    /^\s*\(?\s*async\s*\(\s*\)\s*=>\s*Promise\.(?:all|allSettled)\(\s*\[([^\[\]]*)\]\s*\.map\(\s*(async\s+)?\(?\s*([\w$]+)\s*\)?\s*=>\s*([\s\S]*)\)\s*\)\s*\)?\s*$/u
+      .exec(code)
+      ?.slice(1);
+  if (!mapped) return [];
+  const [array = "", asyncCallback, item = "", body = ""] = mapped;
+  if (!asyncCallback && /\bawait\b/u.test(body)) return [];
+  const forwarding = `app_parts_list.add_part(${item})`;
+  // ponytail: finite forwarding/receipt fixture; broader JavaScript needs a real execution harness.
+  const callbacks = [
+    forwarding,
+    `await${forwarding}`,
+    `{return${forwarding};}`,
+    `{returnawait${forwarding};}`,
+  ];
+  const caught =
+    /^\{\s*try\s*\{\s*return\s*\{([^{}]*)\}\s*;?\s*\}\s*catch\s*\(\s*([\w$]+)\s*\)\s*\{\s*return\s*\{([^{}]*)\}\s*;?\s*\}\s*\}$/u.exec(
+      body.trim(),
+    );
+  if (
+    !callbacks.includes(body.replace(/\s+/gu, "")) &&
+    !(
+      caught &&
+      partReceiptFields(caught[1] ?? "", item, "result", `await${forwarding}`) &&
+      partReceiptFields(caught[3] ?? "", item, "error", `String(${caught[2]})`)
+    )
+  )
+    return [];
+  const entries = [...array.matchAll(/\{([^{}]*)\}/gu)];
+  if (array.replace(/\{[^{}]*\}/gu, "").replace(/[\s,]/gu, "") !== "") return [];
+  const inputs = entries.flatMap((entry) => literalPart(entry[1] ?? ""));
+  return inputs.length === entries.length ? inputs : [];
 };
 
 const FIT_BOUNDARY: EvalCase = {
@@ -110,19 +237,24 @@ const DISCOVER_AND_RUN: EvalCase = {
   useCase: "Discover exact types and list urgent open maintenance orders.",
   prompt: `Use Toolware to find the authorized maintenance tool and list urgent open work orders. Return the useful order data, not a plan. Do not inspect unrelated files.`,
   rubric: (trace) => {
-    const useMode = firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "use");
     const code = codeCalls(trace).join("\n");
     return [
-      criterion("use-mode", "Explicitly selects use mode.", useMode >= 0),
-      criterion(
-        "catalog-search",
-        "Searches the live catalog before execution.",
-        catalogBeforeUse(trace, "search"),
-      ),
       criterion(
         "catalog-types",
-        "Loads exact generated types before execution.",
+        "Loads exact types before execution when search returns only summaries.",
         catalogBeforeUse(trace, "types"),
+      ),
+      criterion(
+        "use-mode",
+        "Uses the legacy toggle fallback without selecting build mode or unsupported per-request mode.",
+        firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "build") < 0,
+      ),
+      criterion(
+        "legacy-inputs",
+        "Omits the request mode field when the deployed schemas do not advertise it.",
+        trace.toolCalls
+          .filter((call) => call.name === "system_catalog" || call.name === "system_use")
+          .every((call) => record(call.input)?.mode === undefined),
       ),
       criterion(
         "exact-method",
@@ -138,6 +270,255 @@ const DISCOVER_AND_RUN: EvalCase = {
   },
 };
 
+const ROUTINE_FIRST_USE: EvalCase = {
+  id: "routine-first-use",
+  category: "consumer efficiency",
+  useCase: "Discover and execute a routine tool with unknown saved mode and request-mode schemas.",
+  prompt: `Use Toolware to find the authorized maintenance tool and list urgent open work orders. Return the useful order data, not a plan. Do not inspect unrelated files.`,
+  rubric: (trace) => [
+    criterion(
+      "one-discovery-and-execution",
+      "Uses one complete catalog response followed by one execution.",
+      calls(trace, "system_catalog").length === 1 &&
+        calls(trace, "system_use").length === 1 &&
+        (catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types")),
+    ),
+    criterion(
+      "request-use-mode",
+      "Selects use mode on each request without changing saved mode.",
+      explicitUseRequests(trace) && calls(trace, "toggle_build_mode").length === 0,
+    ),
+    criterion(
+      "exact-method",
+      "Uses the discovered method with the requested filters.",
+      codeCalls(trace).some(
+        (code) =>
+          isExecutableComposition(code) &&
+          code.includes("app_maintenance_ops.list_work_orders") &&
+          /["']open["']/u.test(code) &&
+          /["']urgent["']/u.test(code),
+      ),
+    ),
+    criterion(
+      "useful-result",
+      "Returns the actual urgent work-order result.",
+      textMatches(trace, /WO-104|burst pipe/iu),
+    ),
+    ...consumerBudget(trace, 2),
+  ],
+};
+
+const KNOWN_CONTRACT_REUSE: EvalCase = {
+  id: "known-contract-reuse",
+  category: "consumer efficiency",
+  useCase: "Execute a contract already returned by Toolware without rediscovery or a mode toggle.",
+  prompt: `Earlier in this same task, Toolware's system_catalog returned this exact authorized published declaration:
+namespace app_maintenance_ops {
+  function list_work_orders(input: { status?: "open" | "closed"; priority?: "low" | "normal" | "urgent" }): Promise<{ orders: Array<{ id: string; title: string; status: string; priority: string }> }>;
+}
+No catalog, access, enablement, or publication change has been reported since that response. Use that tool now to list urgent open work orders and return the useful data. Do not inspect unrelated files.`,
+  rubric: (trace) => [
+    criterion(
+      "reuse-contract",
+      "Reuses the known contract with one execution and no catalog refresh.",
+      calls(trace, "system_use").length === 1 && calls(trace, "system_catalog").length === 0,
+    ),
+    criterion(
+      "request-use-mode",
+      "Selects use mode for execution without changing saved mode.",
+      explicitUseRequests(trace) && calls(trace, "toggle_build_mode").length === 0,
+    ),
+    criterion(
+      "exact-method",
+      "Uses the known method with the requested filters.",
+      codeCalls(trace).some(
+        (code) =>
+          isExecutableComposition(code) &&
+          code.includes("app_maintenance_ops.list_work_orders") &&
+          /["']open["']/u.test(code) &&
+          /["']urgent["']/u.test(code),
+      ),
+    ),
+    criterion(
+      "useful-result",
+      "Returns the actual urgent work-order result.",
+      textMatches(trace, /WO-104|burst pipe/iu),
+    ),
+    ...consumerBudget(trace, 1),
+  ],
+};
+
+const TYPED_SEARCH_REUSE: EvalCase = {
+  id: "typed-search-reuse",
+  category: "tool use",
+  useCase: "Use exact declarations returned by search and reuse them for a second read.",
+  prompt: `Earlier in this task, Toolware confirmed this credential is in use mode. Find the authorized maintenance tool, list urgent open work orders, and also list normal-priority open work orders with the same tool. Return both sets of useful order data. Do not inspect unrelated files.`,
+  rubric: (trace) => {
+    const code = codeCalls(trace).join("\n");
+    return [
+      criterion(
+        "exact-contract",
+        "Discovers exact declarations before execution, including typed search results.",
+        catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types"),
+      ),
+      criterion(
+        "single-discovery",
+        "Uses one catalog response for both reads without redundant mode or type discovery.",
+        calls(trace, "system_catalog").length === 1 &&
+          calls(trace, "toggle_build_mode").length === 0,
+      ),
+      criterion(
+        "reuses-method",
+        "Uses the discovered method for both requested priorities.",
+        code.includes("app_maintenance_ops.list_work_orders") &&
+          /["']urgent["']/u.test(code) &&
+          /["']normal["']/u.test(code),
+      ),
+      criterion(
+        "both-results",
+        "Returns the urgent and normal-priority order data.",
+        textMatches(trace, /WO-104|burst pipe/iu) &&
+          textMatches(trace, /WO-105|loose door handle/iu),
+      ),
+    ];
+  },
+};
+
+const ORDINARY_PARTS_ADD: EvalCase = {
+  id: "ordinary-parts-add",
+  category: "tool use",
+  useCase: "Add a fully specified internal list item once without confirmation or read-back.",
+  prompt: `Use Toolware to add 4 M6 stainless steel bolts to my parts list. This is a list entry only; do not order anything. Earlier in this task, Toolware confirmed this credential is in use mode. Do not inspect unrelated files.`,
+  rubric: (trace) => {
+    const code = codeCalls(trace).join("\n");
+    return [
+      criterion(
+        "exact-contract",
+        "Discovers the exact parts tool contract before execution.",
+        catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types"),
+      ),
+      criterion(
+        "one-mutation",
+        "Composes exactly one intended parts-list addition.",
+        [...code.matchAll(/\bapp_parts_list\.add_part\s*\(/gu)].length === 1,
+      ),
+      criterion(
+        "complete-input",
+        "Supplies the requested part and quantity.",
+        code.includes("M6 stainless steel bolts") &&
+          /["']?quantity["']?\s*:\s*4(?=\s*[,}])/u.test(code),
+      ),
+      criterion(
+        "no-extra-calls",
+        "Avoids extra discovery, lookups, read-back, and mode changes for complete input.",
+        calls(trace, "system_catalog").length === 1 &&
+          calls(trace, "system_use").length === 1 &&
+          calls(trace, "toggle_build_mode").length === 0 &&
+          [...code.matchAll(/\bapp_parts_list\.([a-z_]+)\s*\(/gu)].every(
+            (match) => match[1] === "add_part",
+          ),
+      ),
+      criterion(
+        "completed-without-reconfirmation",
+        "Reports the addition without asking for redundant permission.",
+        textMatches(trace, /added|part-001/iu) && !asksForConfirmation(trace),
+      ),
+    ];
+  },
+};
+
+const MULTIPLE_PARTS_ADD: EvalCase = {
+  id: "multiple-parts-add",
+  category: "consumer efficiency",
+  useCase: "Compose two intended parts-list additions once and preserve both individual outcomes.",
+  prompt: `Use Toolware to add these two entries to my parts list: 4 M6 stainless steel bolts and 8 M6 flat washers. These are internal list entries only; do not order anything. Use one composed call for the related additions and tell me the result for each entry. Do not inspect unrelated files.`,
+  rubric: (trace) => {
+    const outcomes = (trace.toolResults ?? []).flatMap((item) => {
+      const parts = record(record(item.result)?.details)?.partOutcomes;
+      return item.name === "system_use" && !item.isError && Array.isArray(parts)
+        ? parts.map(record).filter((part) => part !== null)
+        : [];
+    });
+    const code = codeCalls(trace).join("\n");
+    return [
+      criterion(
+        "one-discovery-and-composition",
+        "Uses one complete catalog response and one composed execution.",
+        calls(trace, "system_catalog").length === 1 &&
+          calls(trace, "system_use").length === 1 &&
+          (catalogBeforeUse(trace, "search") || catalogBeforeUse(trace, "types")),
+      ),
+      criterion(
+        "request-use-mode",
+        "Selects use mode on each request without a toggle.",
+        explicitUseRequests(trace) && calls(trace, "toggle_build_mode").length === 0,
+      ),
+      criterion(
+        "both-intended-writes",
+        "The mock executes both distinct requested additions exactly once and returns individual success receipts.",
+        outcomes.length === 2 &&
+          outcomes.every((part) => typeof part.id === "string" && part.id.trim().length > 0) &&
+          new Set(outcomes.map((part) => part.id)).size === 2 &&
+          outcomes.some(
+            (part) =>
+              part?.name === "M6 stainless steel bolts" &&
+              part.quantity === 4 &&
+              part.status === "added",
+          ) &&
+          outcomes.some(
+            (part) =>
+              part?.name === "M6 flat washers" && part.quantity === 8 && part.status === "added",
+          ),
+      ),
+      criterion(
+        "no-extra-operations",
+        "Does not perform lookups or read-back for complete inputs.",
+        [...code.matchAll(/\bapp_parts_list\.([a-z_]+)\s*\(/gu)].every(
+          (match) => match[1] === "add_part",
+        ),
+      ),
+      criterion(
+        "individual-outcomes",
+        "Reports both individual additions without requesting redundant permission.",
+        textMatches(trace, /part-001|(?:4.{0,35}M6 stainless steel bolts)/iu) &&
+          textMatches(trace, /part-002|(?:8.{0,35}M6 flat washers)/iu) &&
+          textMatches(trace, /added/iu) &&
+          !asksForConfirmation(trace),
+      ),
+      ...consumerBudget(trace, 2),
+    ];
+  },
+};
+
+const PARTS_ADD_MISSING_INPUT: EvalCase = {
+  id: "parts-add-missing-input",
+  category: "tool use",
+  useCase:
+    "Ask for a required quantity instead of inventing an input or adding a part prematurely.",
+  prompt: `Use Toolware to add M6 stainless steel bolts to my parts list. This is a list entry only; do not order anything. Earlier in this task, Toolware confirmed this credential is in use mode. Do not inspect unrelated files.`,
+  rubric: (trace) => [
+    criterion(
+      "inspects-contract",
+      "Inspects the live contract to identify the missing required input.",
+      firstCallIndex(
+        trace,
+        "system_catalog",
+        (input) => input.action === "search" || input.action === "types",
+      ) >= 0,
+    ),
+    criterion(
+      "no-invented-quantity",
+      "Does not add a part before the user supplies the required quantity.",
+      !codeCalls(trace).join("\n").includes("app_parts_list.add_part"),
+    ),
+    criterion(
+      "asks-quantity",
+      "Asks the user for the missing quantity.",
+      textMatches(trace, /how many|what quantity|which quantity|quantity.{0,30}\?/iu),
+    ),
+  ],
+};
+
 const CATALOG_DRIFT_RECOVERY: EvalCase = {
   id: "catalog-drift-recovery",
   category: "schema recovery",
@@ -145,10 +526,6 @@ const CATALOG_DRIFT_RECOVERY: EvalCase = {
   prompt: `The maintenance team deployed an update a few minutes ago. Use Toolware to list urgent open work orders, recover safely if the catalog changes during the request, and return the actual rows. Do not inspect unrelated files.`,
   rubric: (trace) => {
     const firstUseIndex = firstCallIndex(trace, "system_use");
-    const refreshedSearchIndex = trace.toolCalls.findIndex((call, index) => {
-      const input = record(call.input);
-      return index > firstUseIndex && call.name === "system_catalog" && input?.action === "search";
-    });
     const refreshedTypesIndex = trace.toolCalls.findIndex((call, index) => {
       const input = record(call.input);
       return index > firstUseIndex && call.name === "system_catalog" && input?.action === "types";
@@ -166,8 +543,8 @@ const CATALOG_DRIFT_RECOVERY: EvalCase = {
     return [
       criterion(
         "initial-live-discovery",
-        "Discovers live search results and exact types before the first attempt.",
-        catalogBeforeUse(trace, "search") && catalogBeforeUse(trace, "types"),
+        "Discovers exact types before the first attempt.",
+        catalogBeforeUse(trace, "types"),
       ),
       criterion(
         "observes-stale-call",
@@ -176,15 +553,13 @@ const CATALOG_DRIFT_RECOVERY: EvalCase = {
       ),
       criterion(
         "refreshes-after-failure",
-        "Refreshes both search and exact types after the failed call.",
-        firstUseIndex >= 0 &&
-          refreshedSearchIndex > firstUseIndex &&
-          refreshedTypesIndex > firstUseIndex,
+        "Refreshes exact types after the failed call.",
+        firstUseIndex >= 0 && refreshedTypesIndex > firstUseIndex,
       ),
       criterion(
         "uses-updated-declaration",
         "Rebuilds the call with the newly discovered method only after refreshing types.",
-        updatedUseIndex > refreshedSearchIndex && updatedUseIndex > refreshedTypesIndex,
+        refreshedTypesIndex >= 0 && updatedUseIndex > refreshedTypesIndex,
       ),
       criterion(
         "does-not-escalate",
@@ -256,7 +631,10 @@ const AMBIGUOUS_RETRY: EvalCase = {
       criterion(
         "fresh-confirmation",
         "Requests informed confirmation after presenting the ambiguity.",
-        textMatches(trace, /confirm|would you like|do you want|should I|approval/iu),
+        textMatches(
+          trace,
+          /\bconfirm\b|would you like|do you want|should I|\bapproval\b|do you authorize/iu,
+        ),
       ),
     ];
   },
@@ -297,8 +675,8 @@ const PARTIAL_BATCH_RECOVERY: EvalCase = {
     return [
       criterion(
         "discovers-dispatch-types",
-        "Searches the live catalog and loads exact types before dispatching.",
-        catalogBeforeUse(trace, "search") && catalogBeforeUse(trace, "types"),
+        "Loads exact types before dispatching.",
+        catalogBeforeUse(trace, "types"),
       ),
       criterion(
         "attempts-both-targets",
@@ -341,14 +719,16 @@ const PARTIAL_BATCH_RECOVERY: EvalCase = {
           ) &&
           textMatches(
             trace,
-            /(?:WO-202.{0,80}(?:ambiguous|unknown)|(?:ambiguous|unknown).{0,80}WO-202)/iu,
+            /(?:WO-202.{0,80}(?:ambiguous|unknown|unconfirmed|uncertain)|(?:ambiguous|unknown|unconfirmed|uncertain).{0,80}WO-202)/iu,
           ),
       ),
       criterion(
         "confirms-only-remaining-risk",
         "Rejects pre-authorization and requests fresh confirmation before retrying only the ambiguous write.",
-        textMatches(trace, /confirm|would you like|do you want|should I|approval/iu) &&
-          textMatches(trace, /retry|WO-202/iu),
+        textMatches(
+          trace,
+          /\bconfirm\b|would you like|do you want|should I|\bapproval\b|do you authorize/iu,
+        ) && textMatches(trace, /retry|WO-202/iu),
       ),
     ];
   },
@@ -463,7 +843,10 @@ const BUILD_DRAFT: EvalCase = {
       criterion(
         "build-mode",
         "Explicitly selects build mode.",
-        firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "build") >= 0,
+        firstCallIndex(trace, "toggle_build_mode", (input) => input.mode === "build") >= 0 ||
+          trace.toolCalls
+            .filter((call) => call.name === "system_catalog" || call.name === "system_use")
+            .every((call) => record(call.input)?.mode === "build"),
       ),
       criterion(
         "authoring-contract",
@@ -491,7 +874,7 @@ const BUILD_DRAFT: EvalCase = {
         textMatches(trace, /draft|test|evidence/iu) &&
           textMatches(
             trace,
-            /not publish|not been published|nothing was published|was not published|published.{0,10}no|pending.{0,30}review|review before/iu,
+            /not publish|not been published|nothing (?:was )?published|was not published|published.{0,10}no|(?:pending|awaiting).{0,30}review|review before/iu,
           ),
       ),
     ];
@@ -557,6 +940,12 @@ const SECRET_HANDLING: EvalCase = {
 export const EVAL_CASES: readonly EvalCase[] = [
   FIT_BOUNDARY,
   DISCOVER_AND_RUN,
+  ROUTINE_FIRST_USE,
+  KNOWN_CONTRACT_REUSE,
+  TYPED_SEARCH_REUSE,
+  ORDINARY_PARTS_ADD,
+  MULTIPLE_PARTS_ADD,
+  PARTS_ADD_MISSING_INPUT,
   CATALOG_DRIFT_RECOVERY,
   HIDDEN_TOOL,
   AMBIGUOUS_RETRY,
