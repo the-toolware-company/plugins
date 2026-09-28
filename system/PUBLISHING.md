@@ -1,8 +1,24 @@
 # Publish Toolware
 
-Release: **0.3.2** (prepared for submission). Publisher: **The Toolware Company**.
+Release: **0.3.3** (prepared for GitHub marketplace publication). Publisher: **The Toolware Company**.
 Package: `system`. Git marketplace: `the-toolware-company`.
 Endpoint: **https://thetoolware.company/mcp**.
+
+## Release 0.3.3
+
+The consumer skill now gives routine tool use a shorter path: reuse complete
+search declarations, call known contracts directly, and use request-scoped mode
+when the server advertises it. Legacy mode selection remains supported.
+
+Build guidance uses save-time validation receipts, follows the live evidence
+requirements for closed empty-input tools, and verifies publication with reads
+unless the user requested a real production mutation. Recovery guidance preserves
+confirmed successes and uses host execution receipts without replaying completed
+writes. Consumer evaluations now record call budgets and timing with explicit
+scenario and grading provenance.
+
+Production deployment verification and publication of this release are pending.
+The historical verification below does not attest to release 0.3.3.
 
 ## Current readiness
 

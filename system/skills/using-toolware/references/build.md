@@ -2,13 +2,14 @@
 
 ## Enter build mode and discover live APIs
 
-Select build mode explicitly:
+When the live schemas advertise request-scoped mode, pass `mode: "build"` to
+catalog and execution calls. Otherwise select the saved build mode explicitly:
 
 ```json
 { "mode": "build" }
 ```
 
-Then use `system_catalog` to inspect builder actions. It supports `list`,
+Use `system_catalog` to inspect builder actions. It supports `list`,
 `search`, `describe`, and `types`; in build mode, `tool` is a builder action
 name such as `create_tool`:
 
@@ -20,6 +21,13 @@ Current action families include app/tool authoring, dependencies, draft
 testing, releases, access, secrets, integrations, webhooks, migrations,
 schedules, runs, enablement, and purge. Availability and exact inputs come
 from the live catalog, not this reference.
+
+Reuse complete declarations returned by search; request scoped types only
+for missing actions. Discover the actions needed for the current phase
+together when supported. Use the declared `data` return types to compose
+dependent operations; never guess fields when an older server leaves them
+unspecified. Independent reads or tests on separate workspaces may run in
+parallel. Tests sharing mutable draft state must remain ordered.
 
 Build-mode `system_use` exposes those methods under `system_builder`:
 
@@ -42,21 +50,25 @@ than implicit top-level arrays. `list_runs` uses `data.runs`; `test_tool` and
 
 ## Default build workflow
 
-1. Select build mode.
+1. Use build mode for this request.
 2. Ask `system_catalog({ action: "authoring" })` for the deployed runtime/module/
    context contract, then request exact builder action types.
 3. Request compact app-scoped authoring state, verify its runtime fingerprint
    against the global contract, and use `get_tool_source` for any existing
    version; never reconstruct source from summaries.
-4. Load a vetted recipe when useful, then run the complete proposed module
-   through non-mutating `validate_tool` until blocking structured diagnostics
-   are resolved; only its bounded readiness receipt is persisted.
-5. Save the module as an immutable draft and test representative success,
-   invalid, repeated, and partial-failure cases
-   in the isolated draft workspace.
-6. Run at least two distinct successful draft inputs and one complete workflow
-   simulation. Use bounded `$fromStep` JSON Pointer references when later tools
-   consume earlier outputs.
+4. Load a vetted recipe when useful, then save the complete module as an
+   immutable draft. Save performs preparation checks. Use `validate_tool` when
+   a non-mutating preview is useful, or when the live readiness receipt still
+   requires separate validation evidence. Repair blocking diagnostics before
+   proceeding; do not repeat successful preparation just by habit.
+5. Test representative success, invalid, repeated, and partial-failure cases
+   in the isolated draft workspace. Follow the live receipt's required evidence.
+   Ordinary tools require two distinct successful inputs plus a successful
+   workflow simulation. For a closed no-input tool accepting only `{}`, use
+   the advertised empty-input policy and exercise meaningful empty/populated
+   state in the workflow; never add dummy inputs to satisfy a counter.
+6. Compose ordered workflow steps with bounded `$fromStep` JSON Pointer
+   references when later tools consume earlier outputs. Preserve the receipts.
 7. Present the source purpose, schemas, dependency lock, capability diff, and
    structured test/simulation receipts including run IDs.
 8. Resolve publication-readiness advisories using the live remediation.
@@ -65,38 +77,16 @@ than implicit top-level arrays. `list_runs` uses `data.runs`; `test_tool` and
    authoring contract advertises it, bounded `ctx.storage.sqlBatch`.
 9. Publish only after required confirmation, then configure the narrowest
    access requested.
-10. Return to use mode, rediscover the published types, invoke the tool, and
-   report the result or inspect the recorded run if it fails.
+10. Discover the published types in use mode and verify with a relevant read.
+    Perform a production mutation only for a real action the user requested;
+    draft test records must not become live verification data.
 
-## Create a new capability
-
-Follow this lifecycle:
-
-1. **Clarify the contract.** Establish the operation, callers, inputs,
-   structured outputs, durable data, expected failure behavior, and external
-   effects.
-2. **Inspect APIs.** Retrieve exact types for `create_app`, `create_tool`,
-   `test_tool`, and any dependency, migration, release, or access actions the
-   task needs.
-3. **Create or inspect the app.** An app is the storage, file, secret,
-   integration, sharing, and lifecycle boundary. Do not split one coherent
-   shared data model across apps without a reason.
-4. **Save a complete module.** Use the authoring reference and
-   `assets/tool-template.js`. Declare narrow input/output schemas and minimum
-   capabilities.
-5. **Test the draft.** Exercise representative success, invalid, empty,
-   repeated, concurrency, and partial-failure cases as relevant.
-6. **Review evidence.** Show the user the behavior, schemas, requested
-   capabilities, dependencies/licenses, migration impact, and draft results.
-7. **Publish deliberately.** Publication moves the live pointer to an
-   immutable version. Supply confirmation fields only after the user has
-   approved the surfaced authority/dependency diff.
-8. **Share narrowly.** Prefer `use` over `manage` and explicit tool allowlists
-   when the user requests limited access. Audit with `list_access` after a
-   change.
-9. **Verify as a consumer.** Return to use mode, rediscover exact published
-   types, invoke the tool, and inspect the run if behavior differs from the
-   draft.
+Create one app for a coherent shared data model. Establish the operation,
+callers, structured inputs/outputs, durable records, expected failures and
+external effects from the existing brief. Use narrow schemas and minimum
+capabilities. Before publication, show behavior, authority/dependency changes,
+migration impact and real test evidence. Supply confirmation fields only for
+changes the user has approved.
 
 Updating a tool appends a draft version. It never edits a published version in
 place. Durable constraints permit at most one current draft and one published
@@ -162,9 +152,9 @@ approvals, migrations, or runs.
 
 ## Finish in the user's intended mode
 
-For ordinary end-user work, finish by selecting use mode and confirming the
-published catalog. Leave build mode active only when the user is continuing an
-authoring or management workflow.
+For ordinary end-user work, finish with use-mode requests and confirm the
+published catalog. If you changed the saved mode, restore it to use unless the
+user is continuing an authoring or management workflow.
 
 Use [`assets/tool-template.js`](../assets/tool-template.js) as a starting shape,
 not as a substitute for retrieving live builder schemas.

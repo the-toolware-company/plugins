@@ -109,6 +109,11 @@ substitute for inspecting the version-pinned run. Use `retry_run` only after
 the run evidence and required confirmation support it.
 
 When a composed call partially succeeds, preserve the per-method run evidence.
+When present, the host's `execution` receipt identifies the composition run and
+ordered call outcomes. `succeeded` means that call completed; `failed` and
+`unconfirmed` do not establish rollback. `not_started` means it did not execute.
+An output-size error can follow completed writes: do not repeat them merely to
+produce a smaller response. The receipt intentionally omits tool outputs.
 Do not replay the composition or any confirmed success. Switch to build mode,
 inspect each ambiguous run ID, and separate successful, failed, and unknown
 targets in the response. If completing the original request would require an
